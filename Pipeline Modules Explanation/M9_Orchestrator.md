@@ -34,8 +34,8 @@ Para cada imagen del set de test, el Orchestrator ejecuta los siguientes pasos:
 ### Paso 1A: Clasificación
 
 Pasa la imagen por el **CNNClassifier** y obtiene:
-- La predicción de enfermedad (ej: "cataract")
-- La distribución de probabilidades (ej: {cataract: 0.80, normal: 0.15, glaucoma: 0.05})
+- La predicción de enfermedad (ej: "glaucoma")
+- La distribución de probabilidades (ej: {glaucoma: 0.92, normal: 0.08})
 - El Grad-CAM de la imagen (mapa de calor de 448×448)
 
 Estos resultados se guardan porque se reutilizan múltiples veces.

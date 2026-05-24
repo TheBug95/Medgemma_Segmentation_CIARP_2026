@@ -35,25 +35,25 @@ MedGemma recibe 2 entradas:
 ### Condición C1 — Solo predicción (clase)
 
 - **Imagen**: Cruda, sin modificar
-- **Prompt**: "An ophthalmological classifier identifies the primary finding in this fundus image as: cataract. Describe the ophthalmological findings."
+- **Prompt**: "An ophthalmological classifier identifies the primary finding in this fundus image as: glaucoma. Describe the ophthalmological findings."
 - **Qué prueba**: ¿Decirle QUÉ enfermedad es (sin decirle dónde) mejora la descripción?
 
 ### Condición C2 — Solo distribución completa
 
 - **Imagen**: Cruda, sin modificar
-- **Prompt**: "An ophthalmological classifier analyzed this fundus image and estimates: cataract (80%), normal (15%), glaucoma (5%). Describe the ophthalmological findings."
+- **Prompt**: "An ophthalmological classifier analyzed this fundus image and estimates: glaucoma (92%), normal (8%). Describe the ophthalmological findings."
 - **Qué prueba**: ¿Dar la distribución de probabilidades completa (incluyendo la incertidumbre del clasificador) mejora la descripción? ¿MedGemma genera un texto más cauteloso cuando sabe que el clasificador tiene dudas?
 
 ### Condición D1 — Máscara + predicción
 
 - **Imagen**: Con overlay rojo de la máscara
-- **Prompt**: "An ophthalmological classifier identifies the primary finding as: cataract. The region highlighted in red indicates the area where this finding is located. Describe the findings focusing on the highlighted region."
+- **Prompt**: "An ophthalmological classifier identifies the primary finding as: glaucoma. The region highlighted in red indicates the area where this finding is located. Describe the findings focusing on the highlighted region."
 - **Qué prueba**: ¿Combinar DÓNDE y QUÉ (sin distribución) da mejora adicional?
 
 ### Condición D2 — Máscara + distribución completa
 
 - **Imagen**: Con overlay rojo de la máscara
-- **Prompt**: "An ophthalmological classifier estimates: cataract (80%), normal (15%), glaucoma (5%). The region highlighted in red indicates the area where the main finding is located. Describe the findings in detail, focusing on the highlighted region and its relationship with the suggested diagnosis."
+- **Prompt**: "An ophthalmological classifier estimates: glaucoma (92%), normal (8%). The region highlighted in red indicates the area where the main finding is located. Describe the findings in detail, focusing on the highlighted region and its relationship with the suggested diagnosis."
 - **Qué prueba**: ¿El condicionamiento máximo (DÓNDE + QUÉ + incertidumbre) produce la mejor descripción?
 
 ---
@@ -76,8 +76,8 @@ El resultado es la imagen original con la zona de patología teñida de rojo.
 
 El módulo tiene un **template por condición**. Los templates de C1, C2, D1 y D2 tienen placeholders que se llenan dinámicamente:
 
-- `{prediction}`: se reemplaza con la clase predicha (ej: "cataract")
-- `{distribution}`: se reemplaza con la distribución formateada (ej: "cataract (80%), normal (15%), glaucoma (5%)")
+- `{prediction}`: se reemplaza con la clase predicha (ej: "glaucoma")
+- `{distribution}`: se reemplaza con la distribución formateada (ej: "glaucoma (92%), normal (8%)")
 
 La distribución se formatea ordenando las clases de mayor a menor probabilidad.
 

@@ -80,7 +80,7 @@ El clasificador CNN del Paso 1A dice: "esta imagen tiene **catarata**".
 
 ### Paso 2: Seleccionar el KDE y thresholds correspondientes
 
-Con la predicción "catarata", se buscan el KDE y los thresholds `[Θ_min_cataract, Θ_max_cataract]` que se calibraron previamente para cataratas.
+Con la predicción "glaucoma", se buscan el KDE y los thresholds `[Θ_min_glaucoma, Θ_max_glaucoma]` que se calibraron previamente para glaucoma.
 
 Esta es la dependencia crítica con el clasificador: **sin la predicción, no sabemos contra qué distribución comparar**.
 

@@ -53,7 +53,7 @@ Se usa BiomedBERT (en lugar de BERT genérico) porque está preentrenado en text
 **Precisión de hallazgo**
 
 Métrica binaria simple: ¿el texto generado por MedGemma menciona la patología correcta?
-- Se busca si alguna de las keywords de la enfermedad aparece en el texto (ej: para catarata buscar "cataract", "lens opacity", "opacification", etc.)
+- Se busca si alguna de las keywords de la enfermedad aparece en el texto (ej: para glaucoma buscar "glaucoma", "cupping", "optic nerve", "disc", "rim", etc.)
 - Retorna True o False
 - Útil como métrica de "sanidad": si MedGemma no menciona la enfermedad correcta, la descripción es fundamentalmente incorrecta
 

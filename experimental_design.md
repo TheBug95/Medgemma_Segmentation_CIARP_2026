@@ -12,15 +12,16 @@
 
 ## Datos Disponibles
 
-Cada imagen del dataset contiene **4 anotaciones**:
+Cada imagen del dataset contiene las siguientes anotaciones (almacenadas en `annotations.json`):
 
 | Campo | Tipo | Ejemplo |
 |-------|------|---------|
-| `image` | Imagen RGB | Fondo de ojo / segmento anterior |
-| `disease_category` | Categórica | "cataract", "glaucoma", "AMD", "DR", "normal" |
-| `disease_grading` | Escala clínica | LOCSIII (cataratas): C1-C5, N1-N5, P1-P5 |
-| `segmentation_mask` | Máscara binaria (H×W) | Ground truth pixel-wise |
-| `expert_description` | Texto libre | Descripción del oftalmólogo |
+| `image_filename` | str | "1209_right.jpg" |
+| `label` | str | "Pathological" o "Normal" |
+| `transcription` | Texto libre | "Clinical photograph of the right eye showing..." |
+| `locs_data.conditions` | list[str] | ["glaucoma"] |
+| `locs_data.<enfermedad>` | dict | Grading estructurado: `cup_to_disc_ratio`, `neuroretinal_rim`, etc. (glaucoma) |
+| `segmentation_mask` | Máscara binaria (H×W) | Ground truth pixel-wise en `masks/` |
 
 ### Splits del dataset
 
@@ -28,8 +29,8 @@ Cada imagen del dataset contiene **4 anotaciones**:
 # Usar sklearn con semilla fija
 from sklearn.model_selection import train_test_split
 
-train, temp = train_test_split(data, test_size=0.30, random_state=42, stratify=data['disease_category'])
-val, test   = train_test_split(temp, test_size=0.50, random_state=42, stratify=temp['disease_category'])
+train, temp = train_test_split(data, test_size=0.30, random_state=42, stratify=data['label'])
+val, test   = train_test_split(temp, test_size=0.50, random_state=42, stratify=temp['label'])
 # Resultado: 70% train, 15% val, 15% test
 ```
 
@@ -91,10 +92,10 @@ class DataModule:
             {
                 "image": Tensor (3, H, W),          # Imagen normalizada
                 "image_raw": ndarray (H, W, 3),     # Imagen sin normalizar (para SAM)
-                "disease_category": str,             # "cataract"
-                "disease_grading": str,              # "C3N2P1"
+                "disease_category": str,             # "glaucoma" (de locs_data.conditions[0])
+                "disease_grading": dict,             # {"cup_to_disc_ratio": 3, ...}
                 "segmentation_mask": Tensor (1, H, W),  # Máscara GT binaria
-                "expert_description": str,           # Texto del oftalmólogo
+                "expert_description": str,           # Texto del oftalmólogo (campo transcription)
                 "image_id": str                      # Identificador único
             }
         """
@@ -135,8 +136,8 @@ class CNNClassifier:
         Input: image (3, H, W) normalizada
         Returns:
             {
-                "prediction": str,                    # "cataract"
-                "distribution": dict[str, float],     # {"cataract": 0.80, "normal": 0.15, ...}
+                "prediction": str,                    # "glaucoma"
+                "distribution": dict[str, float],     # {"glaucoma": 0.92, "normal": 0.08}
                 "grading": str                        # Subclasificación si aplica
             }
         """
@@ -568,7 +569,7 @@ data:
 
 classifier:
   backbone: "resnet18"  # Se define después del experimento de selección
-  num_classes: 5
+  num_classes: 2   # Pathological, Normal
   pretrained: true
   epochs: 30
   lr: 0.0001

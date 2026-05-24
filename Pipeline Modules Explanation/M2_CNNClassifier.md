@@ -4,7 +4,7 @@
 
 El CNNClassifier tiene **3 responsabilidades**:
 
-1. **Clasificar** la imagen en una categoría de enfermedad (cataract, glaucoma, AMD, DR, normal)
+1. **Clasificar** la imagen como Pathological o Normal
 2. **Producir una distribución de probabilidades** sobre las categorías (para condicionar MedGemma)
 3. **Generar Grad-CAM** de la última capa convolucional (para Pipeline B WSSS)
 
@@ -14,7 +14,7 @@ Es **compartido** por los 3 pipelines.
 
 ## 2. Arquitectura
 
-El clasificador usa transfer learning: un backbone CNN preentrenado en ImageNet, al cual se le reemplaza la última capa FC por una nueva que clasifica en las 5 categorías oftalmológicas.
+El clasificador usa transfer learning: un backbone CNN preentrenado en ImageNet, al cual se le reemplaza la última capa FC por una nueva que clasifica en 2 clases (Pathological / Normal).
 
 El flujo es: Imagen (448×448) → Backbone CNN → Global Average Pooling → Dropout (50%) → FC → Softmax → Distribución de probabilidades.
 
@@ -57,8 +57,8 @@ Se **congelan todas las capas** excepto el último bloque convolucional y la cap
 ## 4. Predicción
 
 Dada una imagen normalizada, retorna:
-- `prediction`: clase ganadora (ej: "cataract")
-- `distribution`: probabilidades por clase (ej: {"cataract": 0.80, "normal": 0.15, ...})
+- `prediction`: clase ganadora (ej: "glaucoma")
+- `distribution`: probabilidades por clase (ej: {"glaucoma": 0.92, "normal": 0.08})
 - `predicted_index`: índice numérico
 
 ---

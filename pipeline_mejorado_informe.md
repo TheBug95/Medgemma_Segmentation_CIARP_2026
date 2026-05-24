@@ -252,27 +252,27 @@ highlighted region.
 **C1 — +Predicción (solo clase):**
 ```
 An ophthalmological classifier identifies the primary finding in this 
-fundus image as: cataract. Describe the ophthalmological findings.
+fundus image as: glaucoma. Describe the ophthalmological findings.
 ```
 
 **C2 — +Distribución completa:**
 ```
 An ophthalmological classifier analyzed this fundus image and estimates: 
-cataract (80%), normal (15%), glaucoma (5%). Describe the ophthalmological 
+glaucoma (92%), normal (8%). Describe the ophthalmological 
 findings.
 ```
 
 **D1 — +Máscara + Predicción:**
 ```
-An ophthalmological classifier identifies the primary finding as: cataract. 
+An ophthalmological classifier identifies the primary finding as: glaucoma. 
 The region highlighted in red indicates the area where this finding is 
 located. Describe the findings focusing on the highlighted region.
 ```
 
 **D2 — +Máscara + Distribución:**
 ```
-An ophthalmological classifier estimates: cataract (80%), normal (15%), 
-glaucoma (5%). The region highlighted in red indicates the area where the 
+An ophthalmological classifier estimates: glaucoma (92%), normal (8%). 
+The region highlighted in red indicates the area where the 
 main finding is located. Describe the findings in detail, focusing on 
 the highlighted region and its relationship with the suggested diagnosis.
 ```

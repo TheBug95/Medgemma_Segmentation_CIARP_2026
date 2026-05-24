@@ -4,7 +4,7 @@
 
 El DataModule es la **primera pieza** del pipeline. Es el único módulo que toca disco. Todos los demás módulos reciben sus datos a través de él. Su trabajo es:
 
-- Cargar las imágenes y sus 4 anotaciones
+- Cargar las imágenes y sus anotaciones clínicas
 - Mantener las particiones (train/val/test) fijas para reproducibilidad
 - Preparar cada imagen en los formatos que necesitan los demás módulos
 - Proveer lotes (batches) listos para consumir
@@ -17,21 +17,79 @@ El DataModule es la **primera pieza** del pipeline. Es el único módulo que toc
 
 El dataset se organiza en una carpeta con:
 - Una subcarpeta `images/` con todas las imágenes (PNG o JPG, RGB)
-- Una subcarpeta `masks/` con las máscaras ground truth (escala de grises, donde 0=fondo y 255=patología)
-- Un archivo `annotations.csv` que conecta cada imagen con sus anotaciones
+- Una subcarpeta `masks/` con las máscaras ground truth (escala de grises, donde 0=fondo y 255=patología).
+  El nombre del archivo de máscara se deriva del `image_filename` (ej: `1209_right.jpg` → `masks/1209_right_mask.png`)
+- Un archivo `annotations.json` que contiene las anotaciones clínicas de cada imagen
 
-### 2.2 Campos del archivo de anotaciones
+### 2.2 Estructura del archivo `annotations.json`
 
-Cada fila de `annotations.csv` corresponde a una imagen y tiene estos campos:
+`annotations.json` es un **array de objetos JSON**, donde cada objeto representa una imagen con sus anotaciones clínicas:
+
+```json
+{
+  "id": 151,
+  "image_filename": "1209_right.jpg",
+  "label": "Pathological",
+  "transcription": "Clinical photograph of the right eye showing...",
+  "doctor_name": "Dr. Gabriel Alejandro Osorio Navarro",
+  "session_id": "a7a8e254-de9b-47e8-a6f8-42f158e445fc",
+  "locs_data": {
+    "conditions": ["glaucoma"],
+    "glaucoma": {
+      "cup_to_disc_ratio": 3,
+      "neuroretinal_rim": 3,
+      "disc_hemorrhage": 0,
+      "peripapillary_atrophy": 2,
+      "rnfl_defect": 2,
+      "disc_pallor": 1,
+      "vessel_changes": 3
+    }
+  },
+  "source": "gcp",
+  "creator_username": "gabriel_alejandro",
+  "created_at": "2026-04-21T15:29:41.837597+00:00",
+  "updated_at": "2026-04-21T15:31:08.958086+00:00",
+  "filename_hash": "e027c0d144a8defe046a901a9adf02c4533bf78cf390e87b6081ef62107b551a",
+  "session_hash": "6faeb11472b5507fd4598a95eb34776ba08dd86095841958e2dafa012dda1d57",
+  "patient_metadata": null,
+  "is_complete": true
+}
+```
+
+Campos relevantes para el pipeline:
 
 | Campo | Tipo | Ejemplo | Descripción |
 |-------|------|---------|-------------|
-| `image_id` | Texto | "img_0001" | Identificador único |
-| `image_path` | Texto | "images/img_0001.png" | Ruta relativa a la imagen |
-| `mask_path` | Texto | "masks/img_0001_mask.png" | Ruta relativa a la máscara GT |
-| `disease_category` | Texto | "cataract" | Categoría: cataract, glaucoma, AMD, DR, normal |
-| `disease_grading` | Texto | "C3N2P1" | Escala clínica. Para cataratas: LOCSIII |
-| `expert_description` | Texto | "Se observa opacidad..." | Descripción del oftalmólogo |
+| `image_filename` | str | `"1209_right.jpg"` | Nombre del archivo de imagen (ruta en `images/`) |
+| `label` | str | `"Pathological"` | Clasificación binaria: `"Pathological"` o `"Normal"` |
+| `transcription` | str | `"Clinical photograph..."` | Descripción textual del oftalmólogo |
+| `locs_data.conditions` | list[str] | `["glaucoma"]` | Lista de condiciones detectadas (para casos normales: `["normal"]`) |
+| `locs_data.<enfermedad>` | dict | Grading estructurado | Campos de grading específicos de la enfermedad (ver sección 2.3) |
+| `doctor_name` | str | `"Dr. Gabriel..."` | Nombre del oftalmólogo que realizó la anotación |
+
+**Mapeo a los campos usados por el pipeline:**
+
+- `image_filename` → ruta de imagen: `images/{image_filename}`
+- `image_filename` → ruta de máscara GT: `masks/{image_filename_sin_ext}_mask.png`
+- `locs_data.conditions[0]` → `disease_category`
+- `locs_data.<enfermedad>` → `disease_grading`
+- `transcription` → `expert_description`
+
+### 2.3 Escala de Grading para Glaucoma
+
+Cuando `locs_data.conditions` contiene `"glaucoma"`, el objeto `locs_data.glaucoma` contiene los siguientes 7 campos de grading, cada uno correspondiente a un dropdown de clasificación clínica:
+
+| Campo (Field ID) | Rango | Significado de cada valor |
+|------------------|-------|---------------------------|
+| `cup_to_disc_ratio` | 0–4 | 0: ≤0.3 (normal) / 1: 0.4–0.5 (borderline) / 2: 0.6–0.7 (suspicious) / 3: 0.8–0.9 (advanced cupping) / 4: 1.0 (total cupping) |
+| `neuroretinal_rim` | 0–4 | 0: Normal (ISNT rule preserved) / 1: ISNT rule violation / 2: Focal notching / 3: Diffuse thinning / 4: Near-total or total rim loss |
+| `disc_hemorrhage` | 0–1 | 0: None / 1: Present (splinter hemorrhage at or near disc margin) |
+| `peripapillary_atrophy` | 0–2 | 0: None / 1: Beta-zone PPA only / 2: Large or progressive beta-zone PPA |
+| `rnfl_defect` | 0–3 | 0: No visible RNFL defect / 1: Wedge-shaped defect (localized) / 2: Diffuse RNFL thinning / 3: Both wedge defect and diffuse thinning |
+| `disc_pallor` | 0–2 | 0: Normal color / 1: Mild pallor / 2: Significant pallor |
+| `vessel_changes` | 0–3 | 0: Normal vessel pattern / 1: Bayoneting / 2: Nasalization of vessels / 3: Both bayoneting and nasalization |
+
+**Nota:** Esta escala es específica para glaucoma. Si en el futuro se agregan otras enfermedades (ej: catarata), se documentarán sus respectivos campos de grading en `locs_data.<enfermedad>`.
 
 ---
 
@@ -45,7 +103,7 @@ Para que **todos los módulos y todos los investigadores** usen exactamente las 
 
 1. Tomar todas las imágenes del dataset
 2. Dividir en 70% entrenamiento, 15% validación, 15% test
-3. La división debe ser **estratificada por `disease_category`**: esto significa que si el dataset tiene 30% de cataratas, cada split (train, val, test) también tendrá ~30% de cataratas. Esto evita que por azar una clase quede sub-representada en algún split
+3. La división debe ser **estratificada por `label`** (Pathological / Normal). Esto asegura que cada split mantenga la misma proporción de casos patológicos y normales que el dataset original. Si el dataset tiene 60% de casos patológicos, cada split (train, val, test) también tendrá ~60%
 4. Usar `random_state=42` (la semilla global) para que la división sea siempre la misma
 5. Guardar las listas de `image_id` de cada split en `splits.json`
 
@@ -107,15 +165,17 @@ Cuando se pide una imagen al Dataset, retorna un diccionario con:
 
 | Campo | Shape/Tipo | Descripción |
 |-------|-----------|-------------|
-| `image_id` | str | Identificador único |
+| `image_id` | str | Identificador único (`image_filename` sin extensión) |
 | `image_cnn` | Tensor (3, 448, 448) | Imagen normalizada para la CNN |
 | `image_sam` | ndarray (1024, 1024, 3) | Imagen uint8 para SAM |
 | `image_raw` | ndarray (H, W, 3) | Imagen original sin procesar |
 | `mask_gt` | Tensor (1, 448, 448) | Máscara GT a resolución CNN |
 | `mask_gt_sam` | Tensor (1, 1024, 1024) | Máscara GT a resolución SAM |
-| `disease_category` | str | Categoría de enfermedad |
-| `disease_grading` | str | Escala clínica (ej: LOCSIII) |
-| `expert_description` | str | Texto del oftalmólogo |
+| `label` | str | "Pathological" o "Normal" |
+| `disease_category` | str | Condición detectada, derivada de `locs_data.conditions[0]` |
+| `disease_grading` | dict | Grading estructurado (ej: `{"cup_to_disc_ratio": 3, ...}`). `None` si es normal |
+| `expert_description` | str | Descripción del oftalmólogo (campo `transcription`) |
+| `doctor_name` | str | Nombre del oftalmólogo que realizó la anotación |
 
 ### 5.2 Collate function personalizada
 
@@ -130,7 +190,7 @@ PyTorch normalmente apila todos los elementos de un batch en un solo tensor. Per
 La clase DataModule encapsula todo lo anterior. Al inicializarse:
 
 1. Recibe la sección `data` del `config.yaml`
-2. Carga el archivo `annotations.csv`
+2. Carga el archivo `annotations.json`
 3. Carga `splits.json` (nunca lo regenera)
 4. Prepara las transformaciones (train con augmentation, eval sin augmentation)
 

@@ -23,11 +23,35 @@ Cada pipeline se evalúa con **6 condiciones de ablation** para MedGemma (ver se
 
 Los datos son **privados y cerrados**. No deben publicarse, subirse a repositorios públicos, ni incluirse en logs.
 
-Cada imagen tiene 4 anotaciones:
-- `disease_category`: categoría de enfermedad (cataract, glaucoma, AMD, DR, normal)
-- `disease_grading`: escala clínica (ej: LOCSIII para cataratas)
-- `segmentation_mask`: máscara ground truth binaria
-- `expert_description`: descripción textual del oftalmólogo
+Cada imagen tiene sus anotaciones en `annotations.json` (array JSON):
+
+```json
+{
+  "image_filename": "1209_right.jpg",
+  "label": "Pathological",
+  "transcription": "Clinical photograph of the right eye showing...",
+  "locs_data": {
+    "conditions": ["glaucoma"],
+    "glaucoma": {
+      "cup_to_disc_ratio": 3,
+      "neuroretinal_rim": 3,
+      "disc_hemorrhage": 0,
+      "peripapillary_atrophy": 2,
+      "rnfl_defect": 2,
+      "disc_pallor": 1,
+      "vessel_changes": 3
+    }
+  },
+  "doctor_name": "Dr. Gabriel Alejandro Osorio Navarro"
+}
+```
+
+Campos mapeados por el DataModule:
+- `label` → clasificación binaria: "Pathological" o "Normal"
+- `locs_data.conditions` → `disease_category` (ej: "glaucoma")
+- `locs_data.glaucoma` → `disease_grading` (dict con 7 campos de grading, ver M1)
+- `transcription` → `expert_description`
+- Máscara GT → carpeta `masks/`, nombre derivado de `image_filename`
 
 ## Reglas de Código
 
@@ -67,10 +91,10 @@ MedGemma recibe 2 entradas: imagen y prompt. Las condiciones varían qué se env
 |------|--------|--------|-------------------------------------|
 | A | Cruda | Genérico | `mask=None, prediction=None, distribution=None` |
 | B | +Máscara overlay rojo | Menciona región | `mask=mask, prediction=None, distribution=None` |
-| C1 | Cruda | +Solo clase predicha | `mask=None, prediction="cataract", distribution=None` |
-| C2 | Cruda | +Distribución completa | `mask=None, prediction=None, distribution={"cataract": 0.80, ...}` |
-| D1 | +Máscara overlay rojo | +Clase + región | `mask=mask, prediction="cataract", distribution=None` |
-| D2 | +Máscara overlay rojo | +Distribución + región | `mask=mask, prediction=None, distribution={"cataract": 0.80, ...}` |
+| C1 | Cruda | +Solo clase predicha | `mask=None, prediction="glaucoma", distribution=None` |
+| C2 | Cruda | +Distribución completa | `mask=None, prediction=None, distribution={"glaucoma": 0.92, ...}` |
+| D1 | +Máscara overlay rojo | +Clase + región | `mask=mask, prediction="glaucoma", distribution=None` |
+| D2 | +Máscara overlay rojo | +Distribución + región | `mask=mask, prediction=None, distribution={"glaucoma": 0.92, ...}` |
 
 ## Distinciones Críticas entre Pipelines
 
@@ -91,7 +115,7 @@ MedGemma recibe 2 entradas: imagen y prompt. Las condiciones varían qué se env
 ### Pipeline C (FSL/FD) — Filtro por KDE
 - SAM genera N candidatas (modo AMG)
 - Se extrae embedding MedSigLIP de cada candidata
-- El clasificador dice "cataract" → se usan los thresholds KDE de cataract
+- El clasificador dice "glaucoma" → se usan los thresholds KDE de glaucoma
 - Se evalúa log-densidad de cada candidata contra ese KDE
 - Solo pasan las que están dentro de [Θ_min, Θ_max]
 - **DEPENDE** del clasificador (la clase selecciona qué threshold usar)
