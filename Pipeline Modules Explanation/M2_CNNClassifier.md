@@ -4,9 +4,9 @@
 
 El CNNClassifier tiene **3 responsabilidades**:
 
-1. **Clasificar** la imagen como Pathological o Normal
+1. **Clasificar** la imagen según la enfermedad detectada (ej: glaucoma, normal)
 2. **Producir una distribución de probabilidades** sobre las categorías (para condicionar MedGemma)
-3. **Generar Grad-CAM** de la última capa convolucional (para Pipeline B WSSS)
+3. **Generar Grad-CAM** de la última capa convolucional (requerido únicamente por Pipeline B — WSSS)
 
 Es **compartido** por los 3 pipelines.
 
@@ -14,7 +14,9 @@ Es **compartido** por los 3 pipelines.
 
 ## 2. Arquitectura
 
-El clasificador usa transfer learning: un backbone CNN preentrenado en ImageNet, al cual se le reemplaza la última capa FC por una nueva que clasifica en 2 clases (Pathological / Normal).
+El clasificador usa transfer learning: un backbone CNN preentrenado en ImageNet, al cual se le reemplaza la última capa FC por una nueva que clasifica en N clases configurables (actualmente 2: glaucoma, normal).
+
+**Diseño extensible:** La capa FC se define con `num_classes` como parámetro de configuración. Agregar una nueva enfermedad (ej: catarata) solo requiere cambiar `num_classes` en la configuración y reentrenar; no se modifica la arquitectura del clasificador.
 
 El flujo es: Imagen (448×448) → Backbone CNN → Global Average Pooling → Dropout (50%) → FC → Softmax → Distribución de probabilidades.
 
@@ -64,6 +66,8 @@ Dada una imagen normalizada, retorna:
 ---
 
 ## 5. Grad-CAM
+
+**Nota:** La generación de Grad-CAM solo se requiere para el Pipeline B (WSSS), donde se usa para seleccionar la mejor candidata de SAM vía IoU. En los pipelines A y C, `get_gradcam()` no se invoca.
 
 ### 5.1 ¿Qué es?
 

@@ -122,7 +122,7 @@ class CNNClassifier:
         """
         config = {
             "backbone": str,        # "resnet18", "resnet34", "resnet50", "efficientnet_b0", "densenet121"
-            "num_classes": int,     # Número de categorías de enfermedad
+            "num_classes": int,     # Número de categorías (configurable; actualmente 2: glaucoma, normal)
             "pretrained": True,     # ImageNet pretrained
             "seed": 42
         }
