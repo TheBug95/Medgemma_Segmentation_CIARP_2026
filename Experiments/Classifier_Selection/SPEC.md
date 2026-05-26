@@ -2,12 +2,12 @@
 
 ## 1. Objetivo
 
-Seleccionar el mejor backbone CNN (ResNet-18, EfficientNet-B0, DenseNet-121) para el clasificador del pipeline, evaluando **3 dimensiones** (sin training completo, solo few-shot):
+Seleccionar el mejor backbone CNN (ResNet-18, EfficientNet-B0, DenseNet-121) para el clasificador del pipeline, evaluando **3 dimensiones** (sin training completo, solo few-shot con support set de glaucoma):
 - Calidad del Grad-CAM (IoU con máscara GT)
-- Few-shot (Accuracy con N=50, N=100, usando mismas imágenes para todos)
+- Few-shot F1-macro con N=25, 30, 35 (support set exclusivo de glaucoma, 5 iteraciones con seeds compartidas)
 - Costo computacional (parámetros, VRAM, tiempo de inferencia)
 
-> **Nota:** No se realiza training completo. El experimento usa few-shot (N=50, N=100) para comparar backbones.
+> **Nota:** No se realiza training completo. El support set es exclusivamente de glaucoma (clase minoritaria de interés). En REFUGE/train hay 40 glaucomas → N=25, 30, 35. Se corren 5 iteraciones; en cada una todos los backbones usan la misma seed.
 
 ---
 
@@ -149,11 +149,12 @@ El score de selección se calcula sobre las medias.
 # 5. Binarizar con percentil 95
 ```
 
-### Dim 2: Few-shot
-- Accuracy@N50 (50 imágenes)
-- Accuracy@N100 (100 imágenes)
-- F1-macro@N50, F1-macro@N100
-- Mismas imágenes para todos los backbones
+### Dim 2: Few-shot (support set de glaucoma)
+- F1-macro@N25 — 25 de las 40 imágenes de glaucoma en train (62.5%)
+- F1-macro@N30 — 30 de las 40 imágenes de glaucoma en train (75.0%)
+- F1-macro@N35 — 35 de las 40 imágenes de glaucoma en train (87.5%)
+- Evaluación en val set **completo** (40 glaucoma + 360 normal)
+- Mismos subconjuntos para todos los backbones dentro de cada iteración
 
 ### Dim 3: Computacional
 - Total parameters (M)
@@ -166,10 +167,12 @@ El score de selección se calcula sobre las medias.
 ## 8. Fórmula de Selección
 
 ```
-VRAM_norm = (VRAM - min_VRAM) / (max_VRAM - min_VRAM)
-Score = 0.40 × Mean(F1@N50, F1@N100) + 0.40 × IoU_GradCAM + 0.20 × (1 - VRAM_norm)
+VRAM_norm = (VRAM - min_VRAM) / (max_VRAM - min_VRAM + 1e-8)
+F1_mean   = mean(F1@N25_mean, F1@N30_mean, F1@N35_mean)   # medias sobre las 5 iteraciones
+Score     = 0.40 × F1_mean + 0.40 × IoU_GradCAM_mean + 0.20 × (1 - VRAM_norm)
 ```
 
+Todas las métricas son la **media sobre las 5 iteraciones** (seeds 42, 123, 456, 789, 1024).  
 Winner = backbone con mayor Score
 
 ---
@@ -182,10 +185,11 @@ Cada iteración genera sus propios archivos. Al final se agrega sobre las 5 iter
 results/
 ├── resnet18/
 │   ├── seed_42/
-│   │   ├── model_N50.pth
-│   │   ├── model_N100.pth
-│   │   ├── gradcam_metrics.json
-│   │   └── few_shot_metrics.json
+│   │   ├── model_N25.pth
+│   │   ├── model_N30.pth
+│   │   ├── model_N35.pth
+│   │   ├── gradcam_metrics.json    # evaluado con model_N35
+│   │   └── few_shot_metrics.json   # {N25, N30, N35} → {f1_macro, accuracy, epochs}
 │   ├── seed_123/
 │   └── ...  (seed_456, seed_789, seed_1024)
 ├── efficientnet_b0/
@@ -209,7 +213,7 @@ selection_report.md        # Análisis detallado
 | `scripts/convert_refuge_format.py` | Convierte REFUGE → annotations.json + splits.json |
 | `scripts/evaluate.py` | Evaluación de clasificación (Accuracy, F1, Confusion Matrix) |
 | `scripts/extract_gradcam.py` | Grad-CAM + IoU vs GT |
-| `scripts/few_shot.py` | Fine-tune con N=50, N=100 (mismas imágenes para todos) |
+| `scripts/few_shot.py` | Fine-tune con N=25, 30, 35 (support set de glaucoma; mismas imágenes por iteración) |
 | `scripts/benchmark_inference.py` | VRAM y tiempo |
 | `notebook/experiment_orchestrator.ipynb` | Orquestador Colab |
 
