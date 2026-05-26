@@ -39,10 +39,18 @@ classifier:
 
 # Few-shot experiment - mismo sampling para todos los backbones
 few_shot:
-  # Tamaños de Few-shot a evaluar
-  n_samples: [50, 100]
-  # Seed para sampling reproducible (mismas imágenes para todos)
-  seed: 42
+  # Tamaños del support set a evaluar.
+  # RESTRICCIÓN: El support set es EXCLUSIVAMENTE de glaucoma (clase minoritaria).
+  # En train solo hay 40 imágenes con glaucoma → máximo factible es N < 40.
+  # Se usan N=25, 30, 35 para cubrir el rango disponible con margen de seguridad.
+  n_samples: [25, 30, 35]
+  # Lista de seeds para las 5 iteraciones del experimento.
+  # REGLA: en la iteración i, TODOS los backbones usan seeds[i].
+  # Esto garantiza que cada backbone entrena con exactamente las mismas
+  # imágenes y condiciones iniciales en cada iteración, haciendo la
+  # comparación entre backbones justa y estadísticamente válida.
+  # Los resultados finales se reportan como mean ± std sobre las 5 iteraciones.
+  seeds: [42, 123, 456, 789, 1024]
 
 # Augmentations (solo train)
 augmentations:

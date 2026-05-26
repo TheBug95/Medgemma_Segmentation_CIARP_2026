@@ -1,17 +1,29 @@
 {
   "_comment": "selection_summary.json - SE GENERA AUTOMÁTICAMENTE tras ejecutar el experimento",
+  "_strategy": "5 iteraciones por backbone. En la iteración i, TODOS los backbones usan seeds[i]. Resultados finales = mean ± std sobre las 5 iteraciones.",
+  "_support_set": "El support set es EXCLUSIVAMENTE de glaucoma. En REFUGE/train hay 40 glaucomas → N=25,30,35 (todos < 40).",
+  "_seeds": [42, 123, 456, 789, 1024],
+  "_n_samples": [25, 30, 35],
   "_schema": {
     "backbones": {
       "<backbone_name>": {
-        "classification": {
-          "accuracy": "float (0-1)",
-          "f1_macro": "float (0-1)",
-          "precision_glaucoma": "float",
-          "recall_glaucoma": "float"
+        "per_seed": {
+          "42": {
+            "f1_N25": "float (0-1) — F1-macro en val completo con 25 glaucoma de support",
+            "f1_N30": "float (0-1)",
+            "f1_N35": "float (0-1)",
+            "mean_iou_gradcam": "float (0-1) — modelo N35 evaluado en val"
+          },
+          "123": "... (mismo esquema que seed 42)",
+          "456": "...",
+          "789": "...",
+          "1024": "..."
         },
-        "gradcam": {
-          "mean_iou": "float (0-1)",
-          "mean_pointing_accuracy": "float (0-1)"
+        "aggregated": {
+          "f1_N25_mean": "float",  "f1_N25_std": "float",
+          "f1_N30_mean": "float",  "f1_N30_std": "float",
+          "f1_N35_mean": "float",  "f1_N35_std": "float",
+          "mean_iou_mean": "float", "mean_iou_std": "float"
         },
         "computational": {
           "total_parameters": "int",
@@ -19,16 +31,14 @@
           "vram_batch_16_mb": "float",
           "inference_time_ms": "float"
         },
-        "few_shot": {
-          "accuracy_N50": "float",
-          "accuracy_N100": "float"
-        },
-        "score": "float (0-1) - weighted sum"
+        "score": "float (0-1) - calculado sobre medias agregadas"
       }
     },
     "winner": "<backbone_name>",
+    "seeds_used": [42, 123, 456, 789, 1024],
+    "n_samples": [25, 30, 35],
     "config_used": "dict - config.yaml parsed",
     "timestamp": "ISO 8601"
   },
-  "_formula": "Score = 0.30*F1 + 0.30*IoU_GradCAM + 0.20*Acc@N50 + 0.20*(1-VRAM_norm)"
+  "_formula": "Score = 0.40 * mean(f1_N25, f1_N30, f1_N35) + 0.40 * mean_iou + 0.20 * (1 - vram_norm)"
 }

@@ -29,6 +29,10 @@ Seleccionar el mejor backbone CNN (ResNet-18, EfficientNet-B0, DenseNet-121) par
 - **Máscaras:** `Masks/g####.png` (0=background, 1=rim, 2=cup)
 - **Labels:** `index.json` campo `Label` (1=glaucoma, 0=normal)
 
+> **Restricción del support set:** Solo hay **40 imágenes de glaucoma** en train.
+> El support set es exclusivamente de glaucoma (clase de interés y clase minoritaria).
+> Esto limita los tamaños factibles a N < 40, de ahí N=25, 30, 35.
+
 ### Mapeo al Schema del Proyecto
 
 | REFUGE | Proyecto |
@@ -92,16 +96,40 @@ batch_size: 16
 
 ---
 
-## 6. Few-Shot: Mismo Sampling Fijo para Todos
+## 6. Few-Shot: Mismo Sampling Fijo para Todos — 5 Iteraciones
 
-Para que la comparación sea justa, todos los backbones usan las **mismas N imágenes**:
+El experimento corre **5 iteraciones** para cada backbone usando **las mismas 5 semillas**.
+La regla fundamental es: **en la iteración i, TODOS los backbones usan la misma seeds[i]**.
+
+Esto garantiza dos propiedades esenciales:
+1. **Comparabilidad por iteración:** todos los backbones ven exactamente las mismas imágenes en cada iteración.
+2. **Reproducibilidad:** cualquier investigador que ejecute iteración 0 obtendrá siempre el mismo subset.
 
 ```python
-few_shot_indices = {
-    "N50": random.sample(train_ids, 50, seed=42),   # Mismos 50 para todos
-    "N100": random.sample(train_ids, 100, seed=42), # Mismos 100 para todos
-}
+SEEDS = [42, 123, 456, 789, 1024]  # Definidas en config.yaml: few_shot.seeds
+
+# Restricción: el support set es solo glaucoma (40 muestras disponibles en train)
+# N=25 → 62.5% de los glaucoma disponibles
+# N=30 → 75.0% de los glaucoma disponibles
+# N=35 → 87.5% de los glaucoma disponibles
+
+# Iteración 0: resnet18(seed=42), efficientnet_b0(seed=42), densenet121(seed=42)
+# Iteración 1: resnet18(seed=123), efficientnet_b0(seed=123), densenet121(seed=123)
+# ... y así hasta iteración 4
+
+for i, seed in enumerate(SEEDS):            # i = 0..4
+    for backbone in backbones:               # mismo seed para TODOS en esta iteración
+        glaucoma_ids = get_glaucoma_indices(data_module, split='train')  # 40 IDs
+        few_shot_indices = {
+            "N25": random.sample(glaucoma_ids, 25, random_state=seed),
+            "N30": random.sample(glaucoma_ids, 30, random_state=seed),
+            "N35": random.sample(glaucoma_ids, 35, random_state=seed),
+        }
+        # Entrenar backbone con cada subset y esta seed
 ```
+
+**Reporte final:** los resultados se agregan sobre las 5 iteraciones como **mean ± std**.
+El score de selección se calcula sobre las medias.
 
 ---
 
@@ -148,19 +176,24 @@ Winner = backbone con mayor Score
 
 ## 9. Estructura de Resultados
 
+Cada iteración genera sus propios archivos. Al final se agrega sobre las 5 iteraciones.
+
 ```
 results/
 ├── resnet18/
-│   ├── model_N50.pth
-│   ├── model_N100.pth
-│   ├── gradcam_metrics.json
-│   └── few_shot_metrics.json
+│   ├── seed_42/
+│   │   ├── model_N50.pth
+│   │   ├── model_N100.pth
+│   │   ├── gradcam_metrics.json
+│   │   └── few_shot_metrics.json
+│   ├── seed_123/
+│   └── ...  (seed_456, seed_789, seed_1024)
 ├── efficientnet_b0/
 │   └── ...
 └── densenet121/
     └── ...
 
-selection_summary.json    # Tabla comparativa + winner
+selection_summary.json    # Tabla comparativa (mean ± std) + winner
 selection_report.md        # Análisis detallado
 ```
 
