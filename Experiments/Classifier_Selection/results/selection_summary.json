@@ -1,0 +1,34 @@
+{
+  "_comment": "selection_summary.json - SE GENERA AUTOMÁTICAMENTE tras ejecutar el experimento",
+  "_schema": {
+    "backbones": {
+      "<backbone_name>": {
+        "classification": {
+          "accuracy": "float (0-1)",
+          "f1_macro": "float (0-1)",
+          "precision_glaucoma": "float",
+          "recall_glaucoma": "float"
+        },
+        "gradcam": {
+          "mean_iou": "float (0-1)",
+          "mean_pointing_accuracy": "float (0-1)"
+        },
+        "computational": {
+          "total_parameters": "int",
+          "vram_batch_1_mb": "float",
+          "vram_batch_16_mb": "float",
+          "inference_time_ms": "float"
+        },
+        "few_shot": {
+          "accuracy_N50": "float",
+          "accuracy_N100": "float"
+        },
+        "score": "float (0-1) - weighted sum"
+      }
+    },
+    "winner": "<backbone_name>",
+    "config_used": "dict - config.yaml parsed",
+    "timestamp": "ISO 8601"
+  },
+  "_formula": "Score = 0.30*F1 + 0.30*IoU_GradCAM + 0.20*Acc@N50 + 0.20*(1-VRAM_norm)"
+}

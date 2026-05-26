@@ -1,0 +1,96 @@
+# =============================================================================
+# CONFIG.YAML - Configuración Centralizada del Experimento
+# =============================================================================
+# Experimento de selección de clasificador CNN usando few-shot
+# NO hardcodear valores - todo aquí configurable
+# =============================================================================
+
+# Semilla global para reproducibilidad
+seed: 42
+
+# Datos REFUGE
+data:
+  # Ruta base al dataset REFUGE
+  data_dir: "../../Datasets/REFUGE"
+  # Ruta donde se guardará annotations.json y splits.json
+  output_dir: "./data"
+  # Tamaño de imagen para CNN (448x448)
+  image_size: [448, 448]
+  batch_size: 16
+  num_workers: 2
+
+# Backbones a evaluar
+backbones:
+  - resnet18
+  - efficientnet_b0
+  - densenet121
+
+# Clasificador - configuración de training few-shot
+classifier:
+  num_classes: 2  # glaucoma, normal
+  pretrained: true
+  # Training few-shot
+  epochs: 30
+  lr: 0.0001
+  weight_decay: 0.00001
+  patience: 5
+  scheduler_factor: 0.5
+  scheduler_patience: 3
+
+# Few-shot experiment - mismo sampling para todos los backbones
+few_shot:
+  # Tamaños de Few-shot a evaluar
+  n_samples: [50, 100]
+  # Seed para sampling reproducible (mismas imágenes para todos)
+  seed: 42
+
+# Augmentations (solo train)
+augmentations:
+  horizontal_flip: true
+  rotation_degrees: 15
+  color_jitter_brightness: 0.1
+  color_jitter_contrast: 0.1
+  random_erasing: true
+  random_erasing_p: 0.2
+  mixup: true
+  mixup_alpha: 0.2
+
+# Grad-CAM
+gradcam:
+  # Aplicar en la última capa conv del backbone
+  target_layer: "last_conv"
+  # Binarizar con este percentil
+  percentile: 95
+
+# Benchmark de inferencia
+benchmark:
+  batch_sizes: [1, 16]
+  num_runs: 100  # Para medir tiempo promedio
+
+# Rutas de resultados
+results_dir: "./results"
+
+# =============================================================================
+# FORMATO DE annotations.json (generado por convert_refuge_format.py):
+# {
+#   "image_id": {
+#     "image_filename": "g0001.jpg",
+#     "label": "glaucoma",              # o "normal" (minúsculas)
+#     "disease_category": "glaucoma",   # null si normal
+#     "disease_grading": {
+#       "cup_to_disc_ratio": 3,         # 0-4 escala
+#       "vcdr": 0.75                    # valor clínico
+#     },
+#     "mask_path": "Datasets/REFUGE/train/Masks/g0001.png",
+#     "split": "train"
+#   },
+#   ...
+# }
+#
+# FORMATO DE splits.json:
+# {
+#   "train": ["image_id_1", "image_id_2", ...],
+#   "val": ["image_id_X", ...],
+#   "test": ["image_id_Y", ...]
+# }
+# =============================================================================
