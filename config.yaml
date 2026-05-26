@@ -1,0 +1,47 @@
+seed: 42
+
+data:
+  data_dir: "/content/drive/MyDrive/dataset/"
+  splits_file: "splits.json"
+  image_size: [448, 448]
+  sam_image_size: [1024, 1024]
+  batch_size: 16
+  num_workers: 2
+
+classifier:
+  backbone: "resnet18"
+  num_classes: 2
+  pretrained: true
+  epochs: 30
+  lr: 0.0001
+  patience: 5
+
+sam:
+  model_type: "hiera_t"
+  checkpoint: "facebook/sam2.1-hiera-tiny"
+  config_file: "configs/sam2.1/sam2.1_hiera_t.yaml"
+  device: "cuda"
+  points_per_side: 32
+  pred_iou_thresh: 0.7
+  stability_score_thresh: 0.8
+  lora_rank: 8
+  lora_alpha: 16
+  lora_epochs: 50
+  lora_lr: 0.0001
+
+pipeline_b:
+  gradcam_percentile: 95
+
+pipeline_c:
+  feature_extractor: "medsiglip"
+  ood_method: "iqr"
+
+medgemma:
+  model_name: "google/medgemma-4b"
+  torch_dtype: "bfloat16"
+  max_new_tokens: 512
+
+evaluation:
+  bertscore_model: "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract"
+  significance_level: 0.05
+  num_runs: 5

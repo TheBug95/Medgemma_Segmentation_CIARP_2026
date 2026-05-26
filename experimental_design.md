@@ -44,12 +44,12 @@ Cada módulo es **independiente** con interfaces definidas (input/output). Un in
 
 ```
 ┌────────────────────────────────────────────────────────┐
-│                    MÓDULOS (7 piezas)                   │
+│                    MÓDULOS (8 piezas)                   │
 │                                                        │
 │  M1: DataModule          → Carga y preprocesa datos    │
 │  M2: CNNClassifier       → Clasifica + Grad-CAM       │
-│  M3: SAMSegmenter        → Genera máscaras candidatas  │
-│  M4: PipelineA_LoRA      → SAM fine-tuned directo     │
+│  M3: SAMSegmenter        → SAM 2 sin entrenar (AMG)   │
+│  M3b: LoRASAMSegmenter   → SAM 2 fine-tuned (LoRA)    │
 │  M5: PipelineB_WSSS      → Selección por Grad-CAM     │
 │  M6: PipelineC_FSLFD     → Filtro por KDE             │
 │  M7: MedGemmaConditioner → 6 condiciones de ablation  │
@@ -190,78 +190,98 @@ Score = 0.30×F1 + 0.30×IoU_GradCAM + 0.20×Acc@N50 + 0.20×(1-VRAM_norm)
 **Responsable:** Investigador 3
 **Archivo:** `modules/sam_segmenter.py`
 
-### Interfaz
+### M3a: SAMSegmenter (Sin Entrenar)
+
+Usa SAM 2.1 Tiny en modo AMG para generar máscaras candidatas automáticamente.
 
 ```python
 class SAMSegmenter:
     def __init__(self, config: dict):
         """
         config = {
-            "model_type": str,     # "vit_t", "vit_b", "vit_l"
-            "checkpoint": str,     # Ruta al checkpoint de SAM
-            "device": str,         # "cuda"
-            "points_per_side": 32, # Para AMG
-            "pred_iou_thresh": 0.7,
-            "stability_score_thresh": 0.8
+            "model_type": str,              # "hiera_t" (SAM 2 Tiny)
+            "checkpoint": str,              # "facebook/sam2.1-hiera-tiny"
+            "config_file": str,             # "configs/sam2.1/sam2.1_hiera_t.yaml"
+            "device": str,                  # "cuda"
+            "points_per_side": int,         # 32 (grilla 32x32 = 1024 puntos)
+            "pred_iou_thresh": float,       # 0.7
+            "stability_score_thresh": float, # 0.8
+            "seed": int                     # 42
         }
         """
 
     def generate_candidates(self, image_raw: ndarray) -> list[dict]:
         """
         Input: image_raw (H, W, 3) uint8
-        Returns: lista de candidatas, cada una:
+        Returns: lista de candidatas ordenadas por predicted_iou descendente:
             {
                 "mask": ndarray (H, W) bool,
                 "predicted_iou": float,
                 "stability_score": float,
                 "area": int,
+                "area_ratio": float,
                 "bbox": (x, y, w, h)
             }
         """
 ```
 
-### Consideraciones
-- SAM espera imágenes RGB uint8 a 1024×1024
-- Filtrar candidatas por área mínima (>0.5% de la imagen) y máxima (<80%)
-- Ordenar por `predicted_iou` descendente
+### M3b: LoRASAMSegmenter (Fine-tuned con LoRA)
 
----
-
-## M4: PipelineA_LoRA (Segmentador Directo)
-
-**Responsable:** Investigador 3
-**Archivo:** `modules/pipeline_a_lora.py`
-
-### Interfaz
+Hereda de SAMSegmenter. Añade LoRA al Image Encoder (Hiera) para adaptar SAM 2 a imágenes oftalmológicas.
 
 ```python
-class PipelineA_LoRA:
+class LoRASAMSegmenter(SAMSegmenter):
     def __init__(self, config: dict):
         """
+        Hereda config de SAMSegmenter y añade:
         config = {
-            "sam_checkpoint": str,
-            "lora_rank": 8,
-            "lora_alpha": 16,
-            "seed": 42
+            ... (mismos campos que SAMSegmenter) ...
+            "lora_rank": int,         # 8
+            "lora_alpha": int,        # 16
+            "lora_epochs": int,       # 50
+            "lora_lr": float          # 0.0001
         }
         """
 
-    def train(self, train_images, train_masks, val_images, val_masks,
-              epochs=50, lr=1e-4) -> dict:
-        """Entrena SAM con LoRA. Returns training history."""
+    def train(self, train_images: list, train_masks: list,
+              val_images: list, val_masks: list) -> dict:
+        """
+        Entrena SAM 2 con LoRA.
+        Returns: {"history": list, "best_val_iou": float, "best_epoch": int}
+        """
 
     def predict(self, image_raw: ndarray) -> dict:
         """
-        Returns:
-            {
-                "mask": ndarray (H, W) bool,    # Máscara directa
-                "confidence": float
-            }
+        Genera una máscara directa (sin candidatas).
+        Returns: {"mask": ndarray (H, W) bool, "confidence": float}
         """
 
-    def save(self, path: str): ...
-    def load(self, path: str): ...
+    def save(self, path: str) -> None:
+        """Guarda solo adapters LoRA + Mask Decoder (~10MB)."""
+
+    def load(self, path: str) -> None:
+        """Carga adapters sobre el modelo base reconstruido."""
 ```
+
+### Consideraciones
+- SAM 2 espera imágenes RGB uint8 a 1024×1024
+- Filtrar candidatas por área mínima (>0.5% de la imagen) y máxima (<80%)
+- Ordenar por `predicted_iou` descendente
+- LoRA se aplica a Q y V projections del Image Encoder (Hiera)
+- Mask Decoder se desbloquea completamente para entrenar (~4M params)
+
+---
+
+## ~~M4: PipelineA_LoRA (Segmentador Directo)~~ — DEPRECADO
+
+> **NOTA:** La funcionalidad LoRA de Pipeline A ahora está integrada en **M3b: LoRASAMSegmenter** como subclase de SAMSegmenter. Ver sección M3 más arriba. Este módulo se mantiene como referencia histórica.
+
+**Archivo original:** `modules/pipeline_a_lora.py` (eliminado — contenido migrado a `modules/sam_segmenter.py`)
+
+La interfaz de `LoRASAMSegmenter` en M3 proporciona:
+- `train()` — Entrena SAM 2 con LoRA
+- `predict()` — Genera máscara directa
+- `save()` / `load()` — Guarda/carga solo adapters (~10MB)
 
 ---
 
@@ -484,19 +504,23 @@ class Orchestrator:
 
     def run_full_experiment(self):
         """
-        Ejecuta las 18 configuraciones (3 pipelines × 6 condiciones).
+        Ejecuta las 36 configuraciones (6 pipelines × 6 condiciones).
+        Pipelines: amg_direct, lora_direct, wsss_amg, wsss_lora, fslfd_amg, fslfd_lora
+        Condiciones: A, B, C1, C2, D1, D2
         Guarda resultados en results/ con estructura:
             results/
-            ├── pipeline_a_lora/
+            ├── amg_direct/
             │   ├── condition_A.json
-            │   ├── condition_B.json
-            │   ├── condition_C1.json
-            │   ├── condition_C2.json
-            │   ├── condition_D1.json
-            │   └── condition_D2.json
-            ├── pipeline_b_wsss/
             │   └── ...
-            └── pipeline_c_fslfd/
+            ├── lora_direct/
+            │   └── ...
+            ├── wsss_amg/
+            │   └── ...
+            ├── wsss_lora/
+            │   └── ...
+            ├── fslfd_amg/
+            │   └── ...
+            └── fslfd_lora/
                 └── ...
         """
 ```
@@ -511,14 +535,28 @@ for image in test_set:
     classification = cnn_classifier.predict(image)
     gradcam = cnn_classifier.get_gradcam(image)
     
-    # Paso 1B: Obtener máscara (3 pipelines)
-    mask_a = pipeline_a.predict(image)
-    candidates = sam.generate_candidates(image)
-    mask_b = pipeline_b.select_mask(gradcam, candidates)
-    mask_c = pipeline_c.select_mask(classification["prediction"], candidates, image)
+    # Paso 1B: Obtener máscara (2 fuentes × 3 modos)
+    # SAM sin entrenar (AMG)
+    candidates_amg = sam_segmenter.generate_candidates(image)
+    # SAM fine-tuned con LoRA
+    candidates_lora = lora_sam_segmenter.generate_candidates(image)
+    mask_lora_direct = lora_sam_segmenter.predict(image)
     
-    # Paso 2: MedGemma (6 condiciones por pipeline)
-    for pipeline_name, mask in [("lora", mask_a), ("wsss", mask_b), ("fslfd", mask_c)]:
+    # Selección por pipeline
+    mask_b_amg = pipeline_b.select_mask(gradcam, candidates_amg)
+    mask_b_lora = pipeline_b.select_mask(gradcam, candidates_lora)
+    mask_c_amg = pipeline_c.select_mask(classification["prediction"], candidates_amg, image)
+    mask_c_lora = pipeline_c.select_mask(classification["prediction"], candidates_lora, image)
+    
+    # Paso 2: MedGemma (6 condiciones por combinación pipeline × variante)
+    for pipeline_name, mask in [
+        ("amg_direct", candidates_amg[0]),      # AMG: mejor candidata directa
+        ("lora_direct", mask_lora_direct),       # LoRA: predicción directa
+        ("wsss_amg", mask_b_amg),                # WSSS con AMG
+        ("wsss_lora", mask_b_lora),              # WSSS con LoRA
+        ("fslfd_amg", mask_c_amg),               # FD con AMG
+        ("fslfd_lora", mask_c_lora),             # FD con LoRA
+    ]:
         for condition in ["A", "B", "C1", "C2", "D1", "D2"]:
             result = medgemma.generate(
                 condition=condition,
@@ -576,9 +614,17 @@ classifier:
   patience: 5
 
 sam:
-  model_type: "vit_t"
-  checkpoint: "sam2_tiny.pth"
+  model_type: "hiera_t"
+  checkpoint: "facebook/sam2.1-hiera-tiny"
+  config_file: "configs/sam2.1/sam2.1_hiera_t.yaml"
+  device: "cuda"
   points_per_side: 32
+  pred_iou_thresh: 0.7
+  stability_score_thresh: 0.8
+  lora_rank: 8
+  lora_alpha: 16
+  lora_epochs: 50
+  lora_lr: 0.0001
 
 pipeline_a:
   lora_rank: 8
@@ -615,8 +661,7 @@ project/
 │   ├── __init__.py
 │   ├── data_module.py          # M1
 │   ├── cnn_classifier.py       # M2
-│   ├── sam_segmenter.py        # M3
-│   ├── pipeline_a_lora.py      # M4
+│   ├── sam_segmenter.py        # M3: SAMSegmenter + LoRASAMSegmenter
 │   ├── pipeline_b_wsss.py      # M5
 │   ├── pipeline_c_fslfd.py     # M6
 │   ├── medgemma_conditioner.py # M7
@@ -631,12 +676,11 @@ project/
 │   └── run_pipeline.py         # Ejecución del pipeline completo
 ├── results/
 │   ├── cnn_selection/
-│   ├── pipeline_a_lora/
 │   ├── pipeline_b_wsss/
 │   └── pipeline_c_fslfd/
 ├── checkpoints/
 │   ├── cnn/
-│   ├── sam_lora/
+│   ├── sam_lora/               # Solo adapters LoRA (~10MB por enfermedad)
 │   └── fslfd_calibration/
 └── AGENTS.md
 ```
@@ -648,25 +692,28 @@ project/
 ```mermaid
 flowchart TB
     M1["M1: DataModule"] --> M2["M2: CNNClassifier"]
-    M1 --> M3["M3: SAMSegmenter"]
+    M1 --> M3["M3: SAMSegmenter (AMG)"]
+    M1 --> M3b["M3b: LoRASAMSegmenter (LoRA)"]
     M2 --> EXP["Exp: Selección CNN"]
     EXP --> M5["M5: PipelineB_WSSS"]
-    M3 --> M4["M4: PipelineA_LoRA"]
     M3 --> M5
     M3 --> M6["M6: PipelineC_FSLFD"]
+    M3b --> M5
+    M3b --> M6
     M2 --> M6
-    M4 & M5 & M6 --> M7["M7: MedGemmaConditioner"]
+    M5 & M6 & M3b --> M7["M7: MedGemmaConditioner"]
     M7 --> M8["M8: Evaluator"]
     M8 --> M9["M9: Orchestrator"]
 
     style M1 fill:#e8f5e9,stroke:#2e7d32
     style EXP fill:#ffebee,stroke:#c62828
     style M9 fill:#e3f2fd,stroke:#1565C0
+    style M3b fill:#fff3e0,stroke:#e65100
 ```
 
 **Dependencias:**
 - M1 no depende de nadie (se implementa primero)
-- M2 y M3 dependen solo de M1 (se pueden hacer en paralelo)
-- M4, M5, M6 dependen de M2/M3 (se pueden hacer en paralelo entre sí)
-- M7 depende de M4/M5/M6
+- M2, M3 y M3b dependen solo de M1 (se pueden hacer en paralelo)
+- M5 y M6 dependen de M2 y M3/M3b (se pueden hacer en paralelo entre sí)
+- M7 depende de M5/M6 y M3b
 - M8 y M9 van al final
