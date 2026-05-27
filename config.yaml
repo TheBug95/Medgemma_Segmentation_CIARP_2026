@@ -42,6 +42,7 @@ medgemma:
   max_new_tokens: 512
 
 evaluation:
-  bertscore_model: "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract"
+  bertscore_model: "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext"
+  sbert_model: "NeuML/bioclinical-modernbert-base-embeddings"
   significance_level: 0.05
   num_runs: 5

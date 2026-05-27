@@ -452,6 +452,7 @@ class Evaluator:
         """
         config = {
             "bertscore_model": "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract",
+            "sbert_model": "NeuML/bioclinical-modernbert-base-embeddings",
             "seed": 42
         }
         """
@@ -471,6 +472,7 @@ class Evaluator:
         Returns:
             {
                 "bertscore_f1": float,
+                "sbert_similarity": float,
                 "finding_mentioned": bool,     # ¿Menciona la patología correcta?
             }
         """
@@ -645,6 +647,7 @@ medgemma:
 
 evaluation:
   bertscore_model: "microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract"
+  sbert_model: "NeuML/bioclinical-modernbert-base-embeddings"
   significance_level: 0.05
   num_runs: 5
 ```

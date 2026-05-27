@@ -42,13 +42,25 @@ Estas métricas **varían** entre condiciones A-D dentro del mismo pipeline. Son
 **BERTScore (F1)**
 
 Mide similitud semántica entre el texto generado por MedGemma y la descripción del oftalmólogo.
-- Usa un modelo de lenguaje (BiomedBERT) para obtener embeddings de cada palabra/token
+- Usar el modelo de lenguaje (BiomedBERT- microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext) para obtener embeddings de cada palabra/token
 - Calcula la similitud coseno entre los embeddings de ambos textos
 - Retorna Precisión, Recall y F1. Usamos F1 como métrica principal
 - Rango: 0 a 1 (en la práctica, textos médicos suelen estar entre 0.3-0.8)
 - Ventaja sobre métricas como BLEU: captura sinónimos y paráfrasis (ej: "opacidad del cristalino" y "lens opacity" tienen alto BERTScore aunque las palabras son diferentes)
 
 Se usa BiomedBERT (en lugar de BERT genérico) porque está preentrenado en textos biomédicos y entiende mejor la terminología clínica.
+
+**sBERT (Sentence-BERT) con Bioclinical ModernBERT**
+
+Mide similitud semántica a nivel de frase usando embeddings clínicos especializados.
+- Utiliza el modelo NeuML/bioclinical-modernbert-base-embeddings, un modelo de embeddings entrenado en textos clínicos
+- Genera un embedding vectorial para cada texto completo (no por token)
+- Calcula la similitud coseno entre los embeddings de los dos textos
+- Rango: 0 a 1 (en la práctica, textos clínicos suelen estar entre 0.5-0.9)
+- Ventaja sobre BERTScore: captura el significado global de la frase, no solo tokens individuales
+- Más rápido que BERTScore al procesar textos completos en una sola pasada
+
+Se usa Bioclinical ModernBERT porque está específicamente entrenado en notas clínicas y comprende mejor el contexto médico completo.
 
 **Precisión de hallazgo**
 
@@ -122,6 +134,7 @@ Recibe la máscara predicha y la GT. Retorna un diccionario con:
 
 Recibe el texto generado y el texto de referencia. Retorna un diccionario con:
 - `bertscore_f1`: float
+- `sbert_similarity`: float
 - `finding_mentioned`: bool
 
 ---
@@ -141,5 +154,6 @@ Recibe dos listas de scores (uno por condición) y retorna:
 1. IoU y Dice retornan 1.0 cuando la predicción es idéntica a la GT
 2. IoU y Dice retornan 0.0 cuando no hay solapamiento
 3. BERTScore retorna un valor alto cuando se compara un texto consigo mismo
-4. El test de Wilcoxon retorna p ≈ 1.0 cuando ambas listas son idénticas
-5. El test de Wilcoxon retorna p < 0.05 cuando las listas son claramente diferentes
+4. sBERT retorna un valor alto (cercano a 1.0) cuando se compara un texto consigo mismo
+5. El test de Wilcoxon retorna p ≈ 1.0 cuando ambas listas son idénticas
+6. El test de Wilcoxon retorna p < 0.05 cuando las listas son claramente diferentes
