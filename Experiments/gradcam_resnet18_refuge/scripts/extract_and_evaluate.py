@@ -9,7 +9,7 @@
 #   3. Para cada imagen:
 #      - Extrae Grad-CAM usando layer4[-1].conv2
 #      - Binariza con percentil 95
-#      - Carga máscara GT对应
+#      - Carga máscara GT
 #      - Calcula IoU, SSIM, pointing accuracy
 #   4. Genera visualizaciones 2x2
 #   5. Guarda métricas en JSON
@@ -76,7 +76,7 @@ def main():
         extractor.load(model_path)
     else:
         _logger.info("Entrenando modelo...")
-    datamodule = RefugeDataModule(config)
+        datamodule = RefugeDataModule(config)
         train_loader = datamodule.get_train_loader()
         val_loader = datamodule.get_val_loader()
         train_result = extractor.train(train_loader, val_loader)
