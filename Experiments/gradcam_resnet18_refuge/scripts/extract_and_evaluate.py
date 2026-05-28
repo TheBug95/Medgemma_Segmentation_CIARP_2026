@@ -76,7 +76,7 @@ def main():
         extractor.load(model_path)
     else:
         _logger.info("Entrenando modelo...")
-        datamodule = GradCAMDataModule(config)
+    datamodule = RefugeDataModule(config)
         train_loader = datamodule.get_train_loader()
         val_loader = datamodule.get_val_loader()
         train_result = extractor.train(train_loader, val_loader)
