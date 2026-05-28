@@ -1,0 +1,86 @@
+# =============================================================================
+# CONFIG.YAML - Experimento Grad-CAM con ResNet18 en REFUGE
+# =============================================================================
+# Extracción de Grad-CAM y evaluación vs máscara GT en dataset REFUGE
+# =============================================================================
+
+seed: 42
+
+data:
+  # Ruta base al dataset REFUGE (carpeta que contiene train/val/test)
+  data_dir: "../../Datasets/REFUGE"
+  # Split a usar para entrenamiento y evaluación
+  train_split: "train"
+  test_split: "test"
+  # Tamaño de imagen para CNN (resized antes de entrar al modelo)
+  image_size: [448, 448]
+  batch_size: 16
+  num_workers: 2
+
+classifier:
+  backbone: "resnet18"
+  num_classes: 2  # glaucoma, normal
+  pretrained: true
+  # Training hyperparameters
+  epochs: 30
+  lr: 0.0001
+  weight_decay: 0.00001
+  patience: 5
+  scheduler_factor: 0.5
+  scheduler_patience: 3
+
+augmentations:
+  horizontal_flip: true
+  rotation_degrees: 15
+  color_jitter_brightness: 0.1
+  color_jitter_contrast: 0.1
+  random_erasing: true
+  random_erasing_p: 0.2
+  mixup: true
+  mixup_alpha: 0.2
+
+gradcam:
+  # Capa objetivo para Grad-CAM (ResNet18: layer4[-1].conv2)
+  target_layer: "layer4[-1].conv2"
+  # Percentil para binarizar el heatmap de Grad-CAM
+  percentile: 95
+
+visualization:
+  # Número de muestras a visualizar (0 = ninguna)
+  num_samples: 20
+  # Guardar visualización en disco
+  save_images: true
+  # Mostrar en pantalla (plt.show())
+  show_images: false
+  #.Tamaño de figura (width, height) en pulgadas
+  figure_size: [12, 10]
+
+output:
+  # Directorio donde se guardan resultados
+  output_dir: "./output"
+  visualizations_dir: "./visualizations"
+
+# =============================================================================
+# FORMATO DE annotations.json (esperado en data_dir):
+# {
+#   "image_id": {
+#     "image_filename": "g0001.jpg",
+#     "label": "glaucoma",
+#     "mask_path": "Datasets/REFUGE/train/Masks/g0001.png",
+#     "split": "train"
+#   }
+# }
+#
+# FORMATO DE splits.json:
+# {
+#   "train": ["image_id_1", "image_id_2", ...],
+#   "val": ["image_id_X", ...],
+#   "test": ["image_id_Y", ...]
+# }
+#
+# FORMATO DE MÁSCARAS GT:
+#   0 = Background
+#   1 = Rim (neuroretinal border)
+#   2 = Cup (optic cup)
+#   Binaria: mask > 0 → 1 (optic disc)
+# =============================================================================
