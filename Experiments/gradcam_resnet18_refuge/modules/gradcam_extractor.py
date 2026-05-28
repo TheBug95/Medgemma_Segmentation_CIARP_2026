@@ -193,15 +193,16 @@ class RefugeDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, dict]:
         sample = self.samples[idx]
         label = 1 if sample["label"] == "glaucoma" else 0
+        split = sample.get("split", self.split)
 
-        image_path = self.data_dir / "train" / "Images_Cropped" / sample["image_filename"]
+        image_path = self.data_dir / split / "Images_Cropped" / sample["image_filename"]
         if not image_path.exists():
-            image_path = self.data_dir / self.split / "Images_Cropped" / sample["image_filename"]
-        if not image_path.exists():
-            image_path = self.data_dir / self.split / "Images" / sample["image_filename"]
+            image_path = self.data_dir / split / "Images" / sample["image_filename"]
+
+        mask_path = self.data_dir / sample["mask_path"]
 
         image = Image.open(image_path).convert("RGB")
-        mask = Image.open(sample["mask_path"]).convert("L")
+        mask = Image.open(mask_path).convert("L")
 
         image = image.resize(self.image_size, Image.BILINEAR)
         mask = mask.resize(self.image_size, Image.NEAREST)
@@ -217,7 +218,7 @@ class RefugeDataset(Dataset):
 
         mask_t = torch.from_numpy(mask_binary)
 
-        return image_t, mask_t, {"image_id": sample["image_id"], "label": label}
+        return image_t, mask_t, {"image_id": sample["image_id"], "label": label, "split": split}
 
 
 class RefugeDataModule:
@@ -284,7 +285,7 @@ class RefugeDataModule:
                 annotations[img_id] = {
                     "image_filename": img_name,
                     "label": label,
-                    "mask_path": str(split_dir / "Masks_Cropped" / mask_name),
+                    "mask_path": f"{split}/{masks_dir.name}/{mask_name}",
                     "split": split,
                 }
 
