@@ -188,10 +188,18 @@ class RefugeDataset(Dataset):
                 }
             )
 
+        if len(self.samples) == 0:
+            raise RuntimeError(
+                f"Dataset vacío para split='{split}'. "
+                f"Anotaciones totales={len(annotations)}, "
+                f"data_dir={self.data_dir.resolve()}. "
+                f"Verifica la ruta del dataset y las máscaras."
+            )
+
     def __len__(self) -> int:
         return len(self.samples)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, dict]:
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, int, str]:
         sample = self.samples[idx]
         label = 1 if sample["label"] == "glaucoma" else 0
 
@@ -218,7 +226,7 @@ class RefugeDataset(Dataset):
 
         mask_t = torch.from_numpy(mask_binary)
 
-        return image_t, mask_t, {"image_id": sample["image_id"], "label": label, "split": sample["split"]}
+        return image_t, mask_t, label, sample["image_id"]
 
 
 class RefugeDataModule:
@@ -259,36 +267,77 @@ class RefugeDataModule:
     def _generate_annotations_from_structure(self) -> dict:
         """Genera annotations.json desde la estructura del dataset."""
         annotations = {}
-        for split in ["train", "val", "test"]:
-            split_dir = self.data_dir / split
-            if not split_dir.exists():
+        split_mapping = {
+            "train": ["train", "Train", "Training", "training", "TRAIN"],
+            "val": ["val", "Val", "Validation", "validation", "VAL", "dev"],
+            "test": ["test", "Test", "Testing", "testing", "TEST"],
+        }
+
+        logging.info(f"Buscando dataset en: {self.data_dir.resolve()}")
+        for split, alternatives in split_mapping.items():
+            split_dir = None
+            for alt in alternatives:
+                candidate = self.data_dir / alt
+                if candidate.exists():
+                    split_dir = candidate
+                    break
+
+            if split_dir is None:
+                logging.warning(f"No se encontró carpeta para split '{split}' en {self.data_dir}")
                 continue
+
+            logging.info(f"Split '{split}' → {split_dir}")
 
             images_dir = split_dir / "Images_Cropped"
             if not images_dir.exists():
                 images_dir = split_dir / "Images"
+            if not images_dir.exists():
+                images_dir = split_dir / "images"
 
             masks_dir = split_dir / "Masks_Cropped"
             if not masks_dir.exists():
                 masks_dir = split_dir / "Masks"
+            if not masks_dir.exists():
+                masks_dir = split_dir / "masks"
 
             if not images_dir.exists() or not masks_dir.exists():
+                logging.warning(f"  No se encontraron imágenes/máscaras en {split_dir}")
                 continue
 
-            for img_path in sorted(images_dir.glob("*.jpg")):
+            logging.info(f"  Images dir: {images_dir} (exists={images_dir.exists()})")
+            logging.info(f"  Masks dir: {masks_dir} (exists={masks_dir.exists()})")
+
+            # Buscar imágenes con varias extensiones
+            img_paths = []
+            for ext in ["*.jpg", "*.jpeg", "*.JPG", "*.JPEG", "*.png", "*.PNG"]:
+                img_paths.extend(list(images_dir.glob(ext)))
+            img_paths = sorted(set(img_paths))
+
+            logging.info(f"  Encontradas {len(img_paths)} imágenes")
+
+            for img_path in img_paths:
                 img_id = img_path.stem
+                # Detectar si es glaucoma por prefijo o por carpeta
                 label = "glaucoma" if img_path.stem.startswith("g") else "normal"
 
                 img_name = img_path.name
-                mask_name = img_name.replace(".jpg", ".png")
+                # Inferir nombre de máscara (misma base, extensión .png)
+                mask_name = img_path.stem + ".png"
 
                 annotations[img_id] = {
                     "image_filename": img_name,
                     "label": label,
-                    "mask_path": f"{split}/{masks_dir.name}/{mask_name}",
+                    "mask_path": f"{split_dir.name}/{masks_dir.name}/{mask_name}",
                     "split": split,
                 }
 
+        if not annotations:
+            raise RuntimeError(
+                f"No se encontraron imágenes en {self.data_dir}. "
+                f"Verifica que el dataset REFUGE esté en la ruta correcta."
+            )
+
+        logging.info(f"Total de anotaciones generadas: {len(annotations)}")
         return annotations
 
     def _setup_transforms(self) -> None:
@@ -540,7 +589,7 @@ class GradCAMExtractor(nn.Module):
             train_correct = 0
             train_total = 0
 
-            for images, masks, labels in train_loader:
+            for images, masks, labels, _ in train_loader:
                 images = images.to(device)
                 labels = labels.to(device)
 
@@ -561,7 +610,7 @@ class GradCAMExtractor(nn.Module):
             val_correct = 0
             val_total = 0
             with torch.no_grad():
-                for images, masks, labels in val_loader:
+                for images, masks, labels, _ in val_loader:
                     images = images.to(device)
                     labels = labels.to(device)
                     outputs = self.model(images)

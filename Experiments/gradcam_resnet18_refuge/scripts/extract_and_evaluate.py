@@ -109,13 +109,13 @@ def main():
     ious, ssims, pointings = [], [], []
 
     _logger.info("Extrayendo Grad-CAM y calculando métricas...")
-    for i, (images, gt_masks, metas) in enumerate(test_loader):
+    for i, (images, gt_masks, labels, image_ids) in enumerate(test_loader):
         for j in range(images.size(0)):
             img_idx = i * test_loader.batch_size + j
             if img_idx >= len(test_loader.dataset):
                 break
 
-            image_id = metas["image_id"][j]
+            image_id = image_ids[j]
             image = images[j]
             gt_mask = gt_masks[j].numpy()
 
