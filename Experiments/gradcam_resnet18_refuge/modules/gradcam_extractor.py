@@ -183,7 +183,8 @@ class RefugeDataset(Dataset):
                     "image_id": img_id,
                     "image_filename": info["image_filename"],
                     "label": info["label"],
-                    "mask_path": str(mask_path),
+                    "mask_path": info["mask_path"],
+                    "split": info["split"],
                 }
             )
 
@@ -193,11 +194,10 @@ class RefugeDataset(Dataset):
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, dict]:
         sample = self.samples[idx]
         label = 1 if sample["label"] == "glaucoma" else 0
-        split = sample.get("split", self.split)
 
-        image_path = self.data_dir / split / "Images_Cropped" / sample["image_filename"]
+        image_path = self.data_dir / sample["split"] / "Images_Cropped" / sample["image_filename"]
         if not image_path.exists():
-            image_path = self.data_dir / split / "Images" / sample["image_filename"]
+            image_path = self.data_dir / sample["split"] / "Images" / sample["image_filename"]
 
         mask_path = self.data_dir / sample["mask_path"]
 
@@ -218,7 +218,7 @@ class RefugeDataset(Dataset):
 
         mask_t = torch.from_numpy(mask_binary)
 
-        return image_t, mask_t, {"image_id": sample["image_id"], "label": label, "split": split}
+        return image_t, mask_t, {"image_id": sample["image_id"], "label": label, "split": sample["split"]}
 
 
 class RefugeDataModule:

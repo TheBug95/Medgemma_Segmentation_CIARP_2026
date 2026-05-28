@@ -32,7 +32,7 @@ def main():
     _logger.info(f"Semilla: {config['seed']}")
 
     _logger.info("Inicializando DataModule...")
-    datamodule = GradCAMDataModule(config)
+    datamodule = RefugeDataModule(config)
 
     _logger.info("Cargando datos de entrenamiento...")
     train_loader = datamodule.get_train_loader()

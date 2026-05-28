@@ -11,11 +11,12 @@ data:
   data_dir: "../../Datasets/REFUGE"
   # Split a usar para entrenamiento y evaluación
   train_split: "train"
+  val_split: "val"
   test_split: "test"
   # Tamaño de imagen para CNN (resized antes de entrar al modelo)
   image_size: [448, 448]
   batch_size: 16
-  num_workers: 2
+  num_workers: 0
 
 classifier:
   backbone: "resnet18"

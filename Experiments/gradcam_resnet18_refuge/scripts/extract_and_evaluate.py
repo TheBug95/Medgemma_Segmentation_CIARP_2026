@@ -88,7 +88,7 @@ def main():
     extractor.model.eval()
 
     _logger.info("Cargando dataset de test...")
-    datamodule = GradCAMDataModule(config)
+    datamodule = RefugeDataModule(config)
     test_loader = datamodule.get_test_loader()
     _logger.info(f"Test samples: {len(test_loader.dataset)}")
 
