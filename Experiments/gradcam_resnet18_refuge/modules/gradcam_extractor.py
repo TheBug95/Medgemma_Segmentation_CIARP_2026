@@ -560,6 +560,12 @@ class GradCAMExtractor(nn.Module):
         pooled_gradients = self.gradients.mean(dim=(2, 3), keepdim=True)
         heatmap = (pooled_gradients * self.activations).sum(dim=1, keepdim=True)
         heatmap = F.relu(heatmap)
+
+        # Upsamplear Grad-CAM al tamaño original de la imagen (H, W)
+        h, w = self.image_size
+        heatmap = F.interpolate(
+            heatmap, size=(h, w), mode="bilinear", align_corners=False
+        )
         heatmap = heatmap.squeeze().cpu().numpy()
 
         if heatmap.max() > 0:
