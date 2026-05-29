@@ -55,11 +55,23 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--no-train", action="store_true", help="No entrenar, usar modelo existente")
     parser.add_argument("--model-path", type=str, default=None, help="Ruta al modelo pre-entrenado")
+    parser.add_argument("--data-dir", type=str, default=None, help="Sobrescribir ruta al dataset REFUGE")
     args = parser.parse_args()
 
     config_path = Path(__file__).parent.parent / "config.yaml"
     with open(config_path) as f:
         config = yaml.safe_load(f)
+
+    # Resolver data_dir relativo a config.yaml si es una ruta relativa
+    if args.data_dir:
+        config["data"]["data_dir"] = args.data_dir
+        _logger.info(f"data_dir sobrescrito por argumento: {args.data_dir}")
+    else:
+        data_dir = Path(config["data"]["data_dir"])
+        if not data_dir.is_absolute():
+            data_dir = (config_path.parent / data_dir).resolve()
+            config["data"]["data_dir"] = str(data_dir)
+            _logger.info(f"data_dir resuelto relativo a config.yaml: {data_dir}")
 
     set_global_seed(config["seed"])
     output_dir = Path(config["output"]["output_dir"])

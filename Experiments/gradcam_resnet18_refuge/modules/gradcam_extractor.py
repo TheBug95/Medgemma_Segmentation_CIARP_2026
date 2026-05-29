@@ -236,14 +236,78 @@ class RefugeDataModule:
         self.config = config
         set_global_seed(config.get("seed", SEED))
 
-        self.data_dir = Path(config["data"]["data_dir"])
+        self.data_dir = self._resolve_data_dir(config["data"]["data_dir"])
         self.image_size = tuple(config["data"]["image_size"])
         self.batch_size = config["data"].get("batch_size", 16)
         self.num_workers = config["data"].get("num_workers", 2)
         self.test_split = config["data"].get("test_split", "test")
 
+        logging.info(f"Usando data_dir: {self.data_dir}")
         self._load_annotations()
         self._setup_transforms()
+
+    @staticmethod
+    def _resolve_data_dir(data_dir: str) -> Path:
+        """
+        Resuelve la ruta al dataset probando múltiples estrategias.
+
+        1. Si es absoluta y existe, usar directamente.
+        2. Resolver relativa a CWD.
+        3. Resolver relativa al directorio de este archivo (modules/).
+        4. Resolver relativa al directorio del script que lo llama.
+        5. Buscar en ubicaciones comunes de Colab/Drive.
+        """
+        path = Path(data_dir)
+
+        # 1. Ruta absoluta existente
+        if path.is_absolute() and path.exists():
+            return path.resolve()
+
+        candidates = []
+
+        # 2. Relativa a CWD
+        candidates.append(Path.cwd() / path)
+
+        # 3. Relativa a este archivo (modules/gradcam_extractor.py → Experiments/gradcam.../)
+        module_dir = Path(__file__).parent.parent
+        candidates.append(module_dir / path)
+        # También subir hasta el proyecto (desde Experiments/gradcam.../ → raíz)
+        candidates.append(module_dir.parent.parent / path)
+
+        # 4. Relativa al stack de llamadas (script que invoca)
+        import inspect
+        for frame in inspect.stack()[1:]:
+            caller_dir = Path(frame.filename).parent
+            candidates.append(caller_dir / path)
+            # Subir uno más (por si el script está en scripts/)
+            candidates.append(caller_dir.parent / path)
+
+        # 5. Ubicaciones comunes en Google Colab
+        candidates.append(Path("/content/drive/MyDrive/REFUGE"))
+        candidates.append(Path("/content/drive/MyDrive/Datasets/REFUGE"))
+        candidates.append(Path("/content/REFUGE"))
+        candidates.append(Path("/content/Datasets/REFUGE"))
+
+        for candidate in candidates:
+            resolved = candidate.resolve()
+            if resolved.exists():
+                logging.info(f"Dataset encontrado en: {resolved}")
+                return resolved
+
+        # 6. Búsqueda recursiva en Google Drive por cualquier carpeta 'REFUGE'
+        drive_base = Path("/content/drive/MyDrive")
+        if drive_base.exists():
+            logging.info(f"Buscando 'REFUGE' recursivamente en {drive_base}...")
+            for refuge_dir in drive_base.rglob("REFUGE"):
+                if refuge_dir.is_dir():
+                    # Verificar que parece un dataset REFUGE válido (tenga train/Images)
+                    if (refuge_dir / "train" / "Images").exists() or (refuge_dir / "train" / "Images_Cropped").exists():
+                        logging.info(f"Dataset REFUGE encontrado recursivamente en: {refuge_dir}")
+                        return refuge_dir.resolve()
+
+        # Si nada funciona, devolver la primera candidata para que falle con error descriptivo
+        logging.warning(f"No se encontró el dataset en ninguna ubicación conocida. Usando: {candidates[0]}")
+        return candidates[0]
 
     def _load_annotations(self) -> None:
         """Carga annotations.json y genera splits si no existen."""

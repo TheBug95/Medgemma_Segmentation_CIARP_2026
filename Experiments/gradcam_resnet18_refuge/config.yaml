@@ -8,6 +8,9 @@ seed: 42
 
 data:
   # Ruta base al dataset REFUGE (carpeta que contiene train/val/test)
+  # NOTA: Si usas Google Colab, esta ruta se resuelve automáticamente
+  # buscando en ubicaciones comunes. También puedes usar:
+  #   --data-dir /content/drive/MyDrive/.../REFUGE
   data_dir: "../../Datasets/REFUGE"
   # Split a usar para entrenamiento y evaluación
   train_split: "train"
