@@ -550,11 +550,12 @@ class GradCAMExtractor(nn.Module):
         image.requires_grad = True
 
         output = self.model(image)
-        pred_class = output.argmax(dim=1).item()
-
+        # Siempre calcular Grad-CAM sobre la clase patológica (glaucoma, índice 1)
+        # para que ilumine el disco óptico sin importar la predicción.
+        target_class = 1
         self.model.zero_grad()
         one_hot = torch.zeros_like(output)
-        one_hot[0, pred_class] = 1.0
+        one_hot[0, target_class] = 1.0
         output.backward(gradient=one_hot, retain_graph=True)
 
         pooled_gradients = self.gradients.mean(dim=(2, 3), keepdim=True)

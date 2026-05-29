@@ -115,10 +115,15 @@ def main():
         "seed": config["seed"],
         "test_size": len(test_loader.dataset),
         "metrics_per_sample": [],
+        "iou_vs_percentile": {},
         "aggregation": {},
     }
 
     ious, ssims, pointings = [], [], []
+
+    # Percentiles para evaluar sensibilidad del threshold
+    percentiles = [50, 80, 85, 90, 95, 99]
+    iou_by_percentile = {p: [] for p in percentiles}
 
     _logger.info("Extrayendo Grad-CAM y calculando métricas...")
     for i, (images, gt_masks, labels, image_ids) in enumerate(test_loader):
@@ -140,6 +145,12 @@ def main():
             ious.append(metrics["iou"])
             ssims.append(metrics["ssim"])
             pointings.append(metrics["pointing_accuracy"])
+
+            # Calcular IoU para múltiples percentiles (curva de sensibilidad)
+            for p in percentiles:
+                gb = (gradcam >= np.percentile(gradcam, p)).astype(np.float32)
+                m = extractor.compute_metrics(gb, gt_mask)
+                iou_by_percentile[p].append(m["iou"])
 
             results["metrics_per_sample"].append(
                 {
@@ -179,6 +190,15 @@ def main():
         "std_pointing_accuracy": float(np.std(pointings)),
     }
 
+    # Curva IoU vs percentil (para elegir threshold óptimo en Pipeline B)
+    results["iou_vs_percentile"] = {
+        str(p): {
+            "mean": float(np.mean(iou_by_percentile[p])),
+            "std": float(np.std(iou_by_percentile[p])),
+        }
+        for p in percentiles
+    }
+
     metrics_path = output_dir / "metrics.json"
     with open(metrics_path, "w") as f:
         json.dump(results, f, indent=2)
@@ -188,6 +208,10 @@ def main():
     _logger.info(f"  IoU mean: {results['aggregation']['mean_iou']:.4f} ± {results['aggregation']['std_iou']:.4f}")
     _logger.info(f"  SSIM mean: {results['aggregation']['mean_ssim']:.4f} ± {results['aggregation']['std_ssim']:.4f}")
     _logger.info(f"  Pointing Acc mean: {results['aggregation']['mean_pointing_accuracy']:.4f} ± {results['aggregation']['std_pointing_accuracy']:.4f}")
+    _logger.info("  IoU vs Percentil:")
+    for p in percentiles:
+        mean_p = results["iou_vs_percentile"][str(p)]["mean"]
+        _logger.info(f"    p{p:02d}: {mean_p:.4f}")
     _logger.info(f"Métricas guardadas en {metrics_path}")
     _logger.info(f"Visualizaciones guardadas en {vis_dir}")
 
