@@ -545,7 +545,8 @@ class GradCAMExtractor(nn.Module):
         """
         self.model.eval()
 
-        image = image.unsqueeze(0)
+        device = next(self.model.parameters()).device
+        image = image.unsqueeze(0).to(device)
         image.requires_grad = True
 
         output = self.model(image)

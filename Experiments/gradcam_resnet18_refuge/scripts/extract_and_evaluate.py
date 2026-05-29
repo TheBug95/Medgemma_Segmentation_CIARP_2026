@@ -128,7 +128,7 @@ def main():
                 break
 
             image_id = image_ids[j]
-            image = images[j]
+            image = images[j].to(device)
             gt_mask = gt_masks[j].numpy()
 
             image_np = extractor.denormalize(image)
