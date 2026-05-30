@@ -358,22 +358,29 @@ class CNNClassifier:
         activations: dict[str, torch.Tensor] = {}
         gradients: dict[str, torch.Tensor] = {}
 
+        # Capturamos activaciones y gradiente con UN forward hook que, además,
+        # registra un hook sobre el tensor de salida para obtener su gradiente.
+        # NO usamos register_full_backward_hook: este crea una función de autograd
+        # cuya salida es una "view", y densenet aplica F.relu(..., inplace=True)
+        # justo sobre la salida de `features` -> modificar in-place esa view está
+        # prohibido (RuntimeError). El patrón forward-hook + tensor.register_hook
+        # es el estándar de Grad-CAM y funciona con los 3 backbones.
         def forward_hook(_module, _inp, output: torch.Tensor) -> None:
             activations["value"] = output
+            if output.requires_grad:
+                output.register_hook(
+                    lambda grad: gradients.__setitem__("value", grad.detach())
+                )
 
-        def backward_hook(_module, _grad_in, grad_out) -> None:
-            gradients["value"] = grad_out[0]
-
-        handle_f = self.target_layer.register_forward_hook(forward_hook)
-        handle_b = self.target_layer.register_full_backward_hook(backward_hook)
+        handle = self.target_layer.register_forward_hook(forward_hook)
         try:
             logits = self.model(batch)
             class_idx = int(logits.argmax(dim=1).item())
             self.model.zero_grad()
             logits[0, class_idx].backward()
 
-            acts = activations["value"]  # (1, C, h, w)
-            grads = gradients["value"]  # (1, C, h, w)
+            acts = activations["value"].detach()  # (1, C, h, w)
+            grads = gradients["value"]  # (1, C, h, w) ya detached en el hook
             # Peso de cada canal = promedio espacial de su gradiente.
             weights = grads.mean(dim=(2, 3), keepdim=True)  # (1, C, 1, 1)
             cam = F.relu((weights * acts).sum(dim=1, keepdim=True))  # (1, 1, h, w)
@@ -385,8 +392,7 @@ class CNNClassifier:
             cam = cam / (cam.max() + 1e-8)
             return cam.detach().cpu().numpy()
         finally:
-            handle_f.remove()
-            handle_b.remove()
+            handle.remove()
 
     @staticmethod
     def _ensure_batch(image: torch.Tensor) -> torch.Tensor:

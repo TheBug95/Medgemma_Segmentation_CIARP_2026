@@ -1,0 +1,14 @@
+# Datos derivados (se regeneran con scripts/convert_refuge_format.py)
+Experiments/Classifier_Selection/data/
+
+# Zips de datos para Colab (NO versionar; se distribuyen por Google Drive)
+REFUGE_data.zip
+*.zip
+
+# Cache de Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Checkpoints temporales del smoke test
+Experiments/Classifier_Selection/results/_smoke/
