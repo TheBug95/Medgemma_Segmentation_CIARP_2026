@@ -51,6 +51,7 @@ few_shot:
   # comparación entre backbones justa y estadísticamente válida.
   # Los resultados finales se reportan como mean ± std sobre las 5 iteraciones.
   seeds: [42, 123, 456, 789, 1024]
+  support_mode: glaucoma_only # o glaucoma_plus_all_normal o balanced (N glaucoma, N normales)
 
 # Augmentations (solo train)
 augmentations:
