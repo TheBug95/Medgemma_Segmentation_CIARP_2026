@@ -171,16 +171,19 @@ def main():
                 }
             )
 
+            # Generar visualizaciones para TODOS los percentiles evaluados
             if save_images or show_images:
-                plot_gradcam_vs_gt(
-                    image_np.transpose(1, 2, 0),
-                    gradcam,
-                    gt_mask,
-                    image_id,
-                    save_path=str(vis_dir / f"{image_id}_gradcam_vs_gt.png") if save_images else None,
-                    figure_size=figure_size,
-                    show=show_images,
-                )
+                for p in percentiles:
+                    plot_gradcam_vs_gt(
+                        image_np.transpose(1, 2, 0),
+                        gradcam,
+                        gt_mask,
+                        image_id,
+                        save_path=str(vis_dir / f"{image_id}_p{p}_gradcam_vs_gt.png") if save_images else None,
+                        figure_size=figure_size,
+                        show=show_images,
+                        percentile=p,
+                    )
 
             if (i * test_loader.batch_size + j + 1) % 50 == 0:
                 _logger.info(f"Procesadas {(i * test_loader.batch_size + j + 1)}/{len(test_loader.dataset)} imágenes")
