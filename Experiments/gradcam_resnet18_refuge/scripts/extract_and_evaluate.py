@@ -30,6 +30,7 @@
 
 import json
 import logging
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -38,6 +39,15 @@ import numpy as np
 import torch
 import yaml
 from PIL import Image
+
+# Instalar pytorch-grad-cam automáticamente si no está disponible
+try:
+    import pytorch_grad_cam
+except ImportError:
+    logging.warning("pytorch-grad-cam no instalado. Instalando ahora...")
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "grad-cam", "-q"])
+    import pytorch_grad_cam
+    logging.warning("pytorch-grad-cam instalado correctamente.")
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from modules.gradcam_extractor import GradCAMExtractor, RefugeDataModule, set_global_seed
@@ -121,8 +131,8 @@ def main():
 
     ious, ssims, pointings = [], [], []
 
-    # Percentiles para evaluar sensibilidad del threshold
-    percentiles = [50, 80, 85, 90, 95, 99]
+    # Percentiles para evaluar sensibilidad del threshold (50-100 de 10 en 10)
+    percentiles = [50, 60, 70, 80, 90, 100]
     iou_by_percentile = {p: [] for p in percentiles}
 
     _logger.info("Extrayendo Grad-CAM y calculando métricas...")

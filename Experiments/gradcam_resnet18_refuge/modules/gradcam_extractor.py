@@ -536,6 +536,8 @@ class GradCAMExtractor(nn.Module):
     def get_gradcam(self, image: torch.Tensor) -> np.ndarray:
         """
         Extrae Grad-CAM para una imagen.
+        Usa pytorch-grad-cam si está disponible, sino fallback manual
+        alineado con el notebook del paper (CAM_generation.ipynb).
 
         Args:
             image: Tensor (3, H, W) normalizado con ImageNet stats
@@ -543,6 +545,16 @@ class GradCAMExtractor(nn.Module):
         Returns:
             heatmap: ndarray (H, W) con valores en [0, 1]
         """
+        use_external = self.config.get("gradcam", {}).get("use_external", True)
+        if use_external:
+            try:
+                return self._get_gradcam_external(image)
+            except Exception as e:
+                logging.warning(f"pytorch-grad-cam falló ({e}), usando manual fallback")
+        return self._get_gradcam_manual(image)
+
+    def _get_gradcam_manual(self, image: torch.Tensor) -> np.ndarray:
+        """Implementación manual de Grad-CAM (fallback)."""
         self.model.eval()
 
         device = next(self.model.parameters()).device
@@ -550,12 +562,11 @@ class GradCAMExtractor(nn.Module):
         image.requires_grad = True
 
         output = self.model(image)
-        # Siempre calcular Grad-CAM sobre la clase patológica (glaucoma, índice 1)
-        # para que ilumine el disco óptico sin importar la predicción.
-        target_class = 1
+        pred_class = output.argmax(dim=1).item()
+
         self.model.zero_grad()
         one_hot = torch.zeros_like(output)
-        one_hot[0, target_class] = 1.0
+        one_hot[0, pred_class] = 1.0
         output.backward(gradient=one_hot, retain_graph=True)
 
         pooled_gradients = self.gradients.mean(dim=(2, 3), keepdim=True)
@@ -569,10 +580,52 @@ class GradCAMExtractor(nn.Module):
         )
         heatmap = heatmap.squeeze().cpu().numpy()
 
-        if heatmap.max() > 0:
-            heatmap = heatmap / heatmap.max()
+        # Normalización al estilo del notebook: (cam - min) / (max - min)
+        if heatmap.max() > heatmap.min():
+            heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
+
+        # Suavizado gaussiano configurable (similar a aug_smooth/eigen_smooth)
+        sigma = self.config.get("gradcam", {}).get("sigma_smooth", 2.0)
+        if sigma > 0:
+            from scipy.ndimage import gaussian_filter
+            heatmap = gaussian_filter(heatmap, sigma=sigma)
+            # Re-normalizar después del blur
+            if heatmap.max() > heatmap.min():
+                heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
 
         return heatmap
+
+    def _get_gradcam_external(self, image: torch.Tensor) -> np.ndarray:
+        """Grad-CAM usando pytorch-grad-cam (como en el notebook del paper)."""
+        from pytorch_grad_cam import GradCAM
+        from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
+
+        device = next(self.model.parameters()).device
+        image_batch = image.unsqueeze(0).to(device)
+
+        # Determinar clase predicha
+        with torch.no_grad():
+            pred_class = self.model(image_batch).argmax(dim=1).item()
+
+        target_layers = [self.target_layer]
+        cam = GradCAM(model=self.model, target_layers=target_layers)
+        targets = [ClassifierOutputTarget(pred_class)]
+
+        grayscale_cam = cam(input_tensor=image_batch, targets=targets)[0]
+
+        # Normalización al estilo del notebook
+        if grayscale_cam.max() > grayscale_cam.min():
+            grayscale_cam = (grayscale_cam - grayscale_cam.min()) / (grayscale_cam.max() - grayscale_cam.min() + 1e-8)
+
+        # Suavizado gaussiano opcional
+        sigma = self.config.get("gradcam", {}).get("sigma_smooth", 0.0)
+        if sigma > 0:
+            from scipy.ndimage import gaussian_filter
+            grayscale_cam = gaussian_filter(grayscale_cam, sigma=sigma)
+            if grayscale_cam.max() > grayscale_cam.min():
+                grayscale_cam = (grayscale_cam - grayscale_cam.min()) / (grayscale_cam.max() - grayscale_cam.min() + 1e-8)
+
+        return grayscale_cam
 
     def get_gradcam_binary(self, image: torch.Tensor) -> np.ndarray:
         """

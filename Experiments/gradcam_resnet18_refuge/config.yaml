@@ -48,6 +48,12 @@ gradcam:
   target_layer: "layer4[-1].conv2"
   # Percentil para binarizar el heatmap de Grad-CAM
   percentile: 95
+  # Usar pytorch-grad-cam (librería externa) si está disponible
+  # Si es false, usa implementación manual con hooks
+  use_external: true
+  # Suavizado gaussiano post-proceso (0 = desactivado)
+  # Similar a aug_smooth/eigen_smooth del notebook
+  sigma_smooth: 2.0
 
 visualization:
   # Número de muestras a visualizar (0 = ninguna)
