@@ -203,9 +203,8 @@ class RefugeDataset(Dataset):
         sample = self.samples[idx]
         label = 1 if sample["label"] == "glaucoma" else 0
 
-        image_path = self.data_dir / sample["split"] / "Images_Cropped" / sample["image_filename"]
-        if not image_path.exists():
-            image_path = self.data_dir / sample["split"] / "Images" / sample["image_filename"]
+        # Usar SIEMPRE Images/ (originales), nunca Images_Cropped/
+        image_path = self.data_dir / sample["split"] / "Images" / sample["image_filename"]
 
         mask_path = self.data_dir / sample["mask_path"]
 
@@ -470,6 +469,89 @@ class RefugeDataModule:
             dataset,
             batch_size=self.batch_size,
             shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+
+    def get_fewshot_train_loader(
+        self, n_glaucoma: int, n_normal: int, seed: int = 42
+    ) -> DataLoader:
+        """
+        Retorna DataLoader de entrenamiento few-shot.
+        
+        Samplea exactamente n_glaucoma imágenes de la clase glaucoma
+        y n_normal imágenes de la clase normal del split de entrenamiento.
+        
+        Args:
+            n_glaucoma: número de ejemplos de glaucoma (clase positiva)
+            n_normal: número de ejemplos de normal (clase negativa)
+            seed: semilla para reproducibilidad del sampling
+            
+        Returns:
+            DataLoader con el subset few-shot
+        """
+        import random
+        random.seed(seed)
+        np.random.seed(seed)
+        
+        train_split = self.config["data"].get("train_split", "train")
+        
+        # Filtrar solo muestras del split de entrenamiento
+        train_samples = []
+        for img_id, info in self.annotations.items():
+            if info.get("split") != train_split:
+                continue
+            # Verificar que la máscara exista
+            mask_path = self.data_dir / info["mask_path"]
+            if not mask_path.exists():
+                continue
+            train_samples.append({"img_id": img_id, **info})
+        
+        # Separar por clase
+        glaucoma_samples = [s for s in train_samples if s["label"] == "glaucoma"]
+        normal_samples = [s for s in train_samples if s["label"] == "normal"]
+        
+        logging.info(
+            f"Few-shot sampling: {len(glaucoma_samples)} glaucoma disponibles, "
+            f"{len(normal_samples)} normal disponibles"
+        )
+        
+        if len(glaucoma_samples) < n_glaucoma:
+            raise ValueError(
+                f"No hay suficientes ejemplos de glaucoma: "
+                f"se pidieron {n_glaucoma}, hay {len(glaucoma_samples)}"
+            )
+        if len(normal_samples) < n_normal:
+            raise ValueError(
+                f"No hay suficientes ejemplos de normal: "
+                f"se pidieron {n_normal}, hay {len(normal_samples)}"
+            )
+        
+        # Samplear estratificado
+        selected_glaucoma = random.sample(glaucoma_samples, n_glaucoma)
+        selected_normal = random.sample(normal_samples, n_normal)
+        
+        selected = selected_glaucoma + selected_normal
+        logging.info(
+            f"Few-shot dataset: {n_glaucoma} glaucoma + {n_normal} normal = "
+            f"{len(selected)} total"
+        )
+        
+        # Construir anotaciones subset
+        subset_annotations = {s["img_id"]: {k: v for k, v in s.items() if k != "img_id"} 
+                              for s in selected}
+        
+        dataset = RefugeDataset(
+            annotations=subset_annotations,
+            data_dir=self.data_dir,
+            image_size=self.image_size,
+            split=train_split,
+            transform=self.train_transform,
+        )
+        return DataLoader(
+            dataset,
+            batch_size=self.batch_size,
+            shuffle=True,
             num_workers=self.num_workers,
             pin_memory=True,
         )
