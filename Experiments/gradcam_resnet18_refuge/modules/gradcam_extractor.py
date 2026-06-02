@@ -153,7 +153,7 @@ class SSIMCalculator:
 
 
 class RefugeDataset(Dataset):
-    """Dataset para imágenes REFUGE con máscara GT."""
+    """Dataset para imágenes REFUGE con máscara GT y cache en RAM."""
 
     def __init__(
         self,
@@ -162,11 +162,13 @@ class RefugeDataset(Dataset):
         image_size: tuple[int, int],
         split: str = "train",
         transform: Optional[transforms.Compose] = None,
+        cache_in_memory: bool = True,
     ):
         self.data_dir = Path(data_dir)
         self.image_size = image_size
         self.split = split
         self.transform = transform
+        self.cache_in_memory = cache_in_memory
 
         self.samples = []
         for img_id, info in annotations.items():
@@ -194,16 +196,26 @@ class RefugeDataset(Dataset):
                 f"Verifica la ruta del dataset y las máscaras."
             )
 
-    def __len__(self) -> int:
-        return len(self.samples)
+        # Pre-cargar todas las imágenes y máscaras en RAM para evitar
+        # lecturas repetidas desde Google Drive (I/O muy lento)
+        self._cache: dict[int, tuple] = {}
+        if self.cache_in_memory:
+            logging.info(
+                f"Pre-cargando {len(self.samples)} imágenes del split "
+                f"'{split}' en RAM..."
+            )
+            for idx in range(len(self.samples)):
+                self._cache[idx] = self._load_sample(idx)
+            logging.info(f"Cache cargado: {len(self._cache)} imágenes en RAM")
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, int, str]:
+    def _load_sample(self, idx: int) -> tuple[np.ndarray, np.ndarray, int]:
+        """Carga una imagen y máscara desde disco."""
         sample = self.samples[idx]
         label = 1 if sample["label"] == "glaucoma" else 0
 
-        # Usar SIEMPRE Images/ (originales), nunca Images_Cropped/
-        image_path = self.data_dir / sample["split"] / "Images" / sample["image_filename"]
-
+        image_path = (
+            self.data_dir / sample["split"] / "Images" / sample["image_filename"]
+        )
         mask_path = self.data_dir / sample["mask_path"]
 
         image = Image.open(image_path).convert("RGB")
@@ -212,14 +224,28 @@ class RefugeDataset(Dataset):
         image = image.resize(self.image_size, Image.BILINEAR)
         mask = mask.resize(self.image_size, Image.NEAREST)
 
-        image = np.array(image, dtype=np.float32) / 255.0
-        mask = np.array(mask, dtype=np.float32)
-        mask_binary = (mask > 0).astype(np.float32)
+        image_np = np.array(image, dtype=np.float32) / 255.0
+        mask_np = np.array(mask, dtype=np.float32)
+        mask_binary = (mask_np > 0).astype(np.float32)
+
+        return image_np, mask_binary, label
+
+    def __len__(self) -> int:
+        return len(self.samples)
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor, int, str]:
+        sample = self.samples[idx]
+
+        # Usar cache si está disponible, sino cargar desde disco
+        if idx in self._cache:
+            image_np, mask_binary, label = self._cache[idx]
+        else:
+            image_np, mask_binary, label = self._load_sample(idx)
 
         if self.transform:
-            image_t = self.transform(image)
+            image_t = self.transform(image_np)
         else:
-            image_t = torch.from_numpy(image).permute(2, 0, 1)
+            image_t = torch.from_numpy(image_np).permute(2, 0, 1)
 
         mask_t = torch.from_numpy(mask_binary)
 
