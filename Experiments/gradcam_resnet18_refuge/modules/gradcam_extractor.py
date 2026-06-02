@@ -658,6 +658,7 @@ class GradCAMExtractor(nn.Module):
                 logging.warning(f"pytorch-grad-cam falló ({e}), usando manual fallback")
         return self._get_gradcam_manual(image)
 
+    @torch.enable_grad()
     def _get_gradcam_manual(self, image: torch.Tensor) -> np.ndarray:
         """Implementación manual de Grad-CAM (fallback)."""
         self.model.eval()
