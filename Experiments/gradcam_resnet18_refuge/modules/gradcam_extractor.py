@@ -243,10 +243,14 @@ class RefugeDataModule:
         self._load_annotations()
         self._setup_transforms()
 
+    # Cache de ruta resuelta para evitar búsquedas repetidas
+    _resolved_paths: dict[str, Path] = {}
+
     @staticmethod
     def _resolve_data_dir(data_dir: str) -> Path:
         """
         Resuelve la ruta al dataset probando múltiples estrategias.
+        Cachea el resultado para evitar búsquedas repetidas.
 
         1. Si es absoluta y existe, usar directamente.
         2. Resolver relativa a CWD.
@@ -254,11 +258,18 @@ class RefugeDataModule:
         4. Resolver relativa al directorio del script que lo llama.
         5. Buscar en ubicaciones comunes de Colab/Drive.
         """
+        # Verificar cache primero
+        if data_dir in RefugeDataModule._resolved_paths:
+            cached = RefugeDataModule._resolved_paths[data_dir]
+            logging.info(f"Usando data_dir cacheado: {cached}")
+            return cached
         path = Path(data_dir)
 
         # 1. Ruta absoluta existente
         if path.is_absolute() and path.exists():
-            return path.resolve()
+            resolved = path.resolve()
+            RefugeDataModule._resolved_paths[data_dir] = resolved
+            return resolved
 
         candidates = []
 
@@ -290,18 +301,29 @@ class RefugeDataModule:
             resolved = candidate.resolve()
             if resolved.exists():
                 logging.info(f"Dataset encontrado en: {resolved}")
+                RefugeDataModule._resolved_paths[data_dir] = resolved
                 return resolved
 
-        # 6. Búsqueda recursiva en Google Drive por cualquier carpeta 'REFUGE'
+        # 6. Búsqueda recursiva en Google Drive (limitada a 3 niveles de profundidad)
         drive_base = Path("/content/drive/MyDrive")
         if drive_base.exists():
-            logging.info(f"Buscando 'REFUGE' recursivamente en {drive_base}...")
-            for refuge_dir in drive_base.rglob("REFUGE"):
-                if refuge_dir.is_dir():
-                    # Verificar que parece un dataset REFUGE válido (tenga train/Images)
-                    if (refuge_dir / "train" / "Images").exists() or (refuge_dir / "train" / "Images_Cropped").exists():
-                        logging.info(f"Dataset REFUGE encontrado recursivamente en: {refuge_dir}")
-                        return refuge_dir.resolve()
+            logging.info(
+                f"Buscando 'REFUGE' en {drive_base} (máx 3 niveles)..."
+            )
+            # Búsqueda limitada en profundidad para evitar escanear todo Drive
+            for depth in range(1, 4):
+                pattern = "/".join(["*"] * depth) + "/REFUGE"
+                for refuge_dir in drive_base.glob(pattern):
+                    if refuge_dir.is_dir():
+                        if (refuge_dir / "train" / "Images").exists() or (
+                            refuge_dir / "train" / "Images_Cropped"
+                        ).exists():
+                            result = refuge_dir.resolve()
+                            logging.info(
+                                f"Dataset REFUGE encontrado en: {result}"
+                            )
+                            RefugeDataModule._resolved_paths[data_dir] = result
+                            return result
 
         # Si nada funciona, devolver la primera candidata para que falle con error descriptivo
         logging.warning(f"No se encontró el dataset en ninguna ubicación conocida. Usando: {candidates[0]}")
