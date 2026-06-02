@@ -276,6 +276,11 @@ def main() -> None:
         default=10,
         help="Número de visualizaciones por clase",
     )
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Ruta al dataset REFUGE (sobreescribe config.yaml). Ej: /content/drive/MyDrive/.../REFUGE",
+    )
     args = parser.parse_args()
     
     setup_logging()
@@ -284,6 +289,11 @@ def main() -> None:
     config_path = Path(args.config)
     with open(config_path) as f:
         config = yaml.safe_load(f)
+    
+    # Sobreescribir data_dir si se pasa por CLI
+    if args.data_dir:
+        config["data"]["data_dir"] = args.data_dir
+        logging.info(f"Usando data_dir desde CLI: {args.data_dir}")
     
     output_base = Path(args.output_dir)
     

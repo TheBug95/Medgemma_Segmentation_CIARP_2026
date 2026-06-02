@@ -282,6 +282,7 @@ class RefugeDataModule:
         # 5. Ubicaciones comunes en Google Colab
         candidates.append(Path("/content/drive/MyDrive/REFUGE"))
         candidates.append(Path("/content/drive/MyDrive/Datasets/REFUGE"))
+        candidates.append(Path("/content/drive/MyDrive/Dropbox/Migue/Doctorado/Datasets/REFUGE"))
         candidates.append(Path("/content/REFUGE"))
         candidates.append(Path("/content/Datasets/REFUGE"))
 

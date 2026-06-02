@@ -123,6 +123,11 @@ def main() -> None:
         default="./output",
         help="Directorio base para guardar modelos",
     )
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help="Ruta al dataset REFUGE (sobreescribe config.yaml). Ej: /content/drive/MyDrive/.../REFUGE",
+    )
     args = parser.parse_args()
     
     setup_logging()
@@ -131,6 +136,11 @@ def main() -> None:
     config_path = Path(args.config)
     with open(config_path) as f:
         config = yaml.safe_load(f)
+    
+    # Sobreescribir data_dir si se pasa por CLI
+    if args.data_dir:
+        config["data"]["data_dir"] = args.data_dir
+        logging.info(f"Usando data_dir desde CLI: {args.data_dir}")
     
     # Reducir épocas para few-shot (sobreescribir si está en config)
     if "few_shot" in config:
