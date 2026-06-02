@@ -142,13 +142,13 @@ def main() -> None:
         config["data"]["data_dir"] = args.data_dir
         logging.info(f"Usando data_dir desde CLI: {args.data_dir}")
     
-    # Reducir épocas para few-shot (sobreescribir si está en config)
+    # Configuración few-shot: pocos ejemplos = overfitting rápido
     if "few_shot" in config:
         config["classifier"]["epochs"] = config["few_shot"].get("epochs", 15)
-        config["classifier"]["patience"] = config["few_shot"].get("patience", 10)
+        config["classifier"]["patience"] = config["few_shot"].get("patience", 3)
     else:
         config["classifier"]["epochs"] = 15
-        config["classifier"]["patience"] = 10
+        config["classifier"]["patience"] = 3
     
     logging.info(f"Configuración few-shot: {config['classifier']['epochs']} épocas")
     

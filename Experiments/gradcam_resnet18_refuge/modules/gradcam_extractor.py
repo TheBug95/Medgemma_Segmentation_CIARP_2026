@@ -786,10 +786,59 @@ class GradCAMExtractor(nn.Module):
 
         return {"iou": float(iou), "ssim": float(ssim), "pointing_accuracy": float(pointing_acc)}
 
+    def _compute_f1_per_class(
+        self, preds: np.ndarray, labels: np.ndarray, num_classes: int = 2
+    ) -> dict:
+        """
+        Calcula precision, recall y F1 por clase de forma manual.
+
+        Args:
+            preds: array de predicciones (N,)
+            labels: array de labels verdaderos (N,)
+            num_classes: número de clases
+
+        Returns:
+            dict con 'f1_macro', 'f1_per_class', 'precision_per_class',
+            'recall_per_class'
+        """
+        f1s = []
+        precisions = []
+        recalls = []
+
+        for c in range(num_classes):
+            tp = int(np.sum((preds == c) & (labels == c)))
+            fp = int(np.sum((preds == c) & (labels != c)))
+            fn = int(np.sum((preds != c) & (labels == c)))
+
+            precision = tp / (tp + fp) if (tp + fp) > 0 else 0.0
+            recall = tp / (tp + fn) if (tp + fn) > 0 else 0.0
+            f1 = (
+                2 * precision * recall / (precision + recall)
+                if (precision + recall) > 0
+                else 0.0
+            )
+
+            precisions.append(precision)
+            recalls.append(recall)
+            f1s.append(f1)
+
+        f1_macro = float(np.mean(f1s))
+        return {
+            "f1_macro": f1_macro,
+            "f1_per_class": f1s,
+            "precision_per_class": precisions,
+            "recall_per_class": recalls,
+        }
+
     def train(
         self, train_loader: DataLoader, val_loader: DataLoader
     ) -> dict:
-        """Entrena el modelo con early stopping."""
+        """
+        Entrena el modelo con early stopping basado en F1-macro.
+
+        Early stopping mira F1-macro en validación (balanceado entre clases)
+        en lugar de accuracy, que es engañosa en datasets desbalanceados.
+        """
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.model = self.model.to(device)
 
@@ -797,7 +846,7 @@ class GradCAMExtractor(nn.Module):
         optimizer = torch.optim.Adam(
             self.model.parameters(),
             lr=self.config["classifier"]["lr"],
-            weight_decay=self.config["classifier"].get("weight_decay", 1e-5),
+            weight_decay=self.config["classifier"].get("weight_decay", 1e-4),
         )
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
             optimizer,
@@ -806,7 +855,7 @@ class GradCAMExtractor(nn.Module):
             patience=self.config["classifier"].get("scheduler_patience", 3),
         )
 
-        best_acc = 0.0
+        best_f1_macro = 0.0
         patience_counter = 0
         best_state = None
 
@@ -814,6 +863,7 @@ class GradCAMExtractor(nn.Module):
         patience = self.config["classifier"]["patience"]
 
         for epoch in range(epochs):
+            # ---------- Entrenamiento ----------
             self.model.train()
             train_loss = 0.0
             train_correct = 0
@@ -836,43 +886,71 @@ class GradCAMExtractor(nn.Module):
 
             train_acc = train_correct / train_total
 
+            # ---------- Validación ----------
             self.model.eval()
-            val_correct = 0
-            val_total = 0
+            val_preds = []
+            val_labels = []
+            val_loss_sum = 0.0
+
             with torch.no_grad():
                 for images, masks, labels, _ in val_loader:
                     images = images.to(device)
                     labels = labels.to(device)
                     outputs = self.model(images)
-                    _, predicted = outputs.max(1)
-                    val_total += labels.size(0)
-                    val_correct += predicted.eq(labels).sum().item()
+                    loss = criterion(outputs, labels)
+                    val_loss_sum += loss.item()
 
-            val_acc = val_correct / val_total
-            scheduler.step(val_acc)
+                    _, predicted = outputs.max(1)
+                    val_preds.append(predicted.cpu().numpy())
+                    val_labels.append(labels.cpu().numpy())
+
+            val_preds = np.concatenate(val_preds)
+            val_labels = np.concatenate(val_labels)
+
+            val_acc = np.mean(val_preds == val_labels)
+            metrics = self._compute_f1_per_class(val_preds, val_labels)
+            f1_macro = metrics["f1_macro"]
+            sens_glaucoma = metrics["recall_per_class"][1]
+            spec_normal = metrics["recall_per_class"][0]
+
+            scheduler.step(f1_macro)
 
             logging.info(
-                f"Epoch {epoch+1}/{epochs} - "
-                f"Train Loss: {train_loss/len(train_loader):.4f}, "
-                f"Train Acc: {train_acc:.4f}, "
-                f"Val Acc: {val_acc:.4f}"
+                f"Epoch {epoch+1}/{epochs} | "
+                f"Train Loss: {train_loss/len(train_loader):.4f} | "
+                f"Train Acc: {train_acc:.4f} | "
+                f"Val Loss: {val_loss_sum/len(val_loader):.4f} | "
+                f"Val Acc: {val_acc:.4f} | "
+                f"F1-macro: {f1_macro:.4f} | "
+                f"Sens(G): {sens_glaucoma:.4f} | "
+                f"Spec(N): {spec_normal:.4f}"
             )
 
-            if val_acc > best_acc:
-                best_acc = val_acc
-                best_state = {k: v.cpu().clone() for k, v in self.model.state_dict().items()}
+            # ---------- Early stopping por F1-macro ----------
+            if f1_macro > best_f1_macro:
+                best_f1_macro = f1_macro
+                best_state = {
+                    k: v.cpu().clone() for k, v in self.model.state_dict().items()
+                }
                 patience_counter = 0
             else:
                 patience_counter += 1
                 if patience_counter >= patience:
-                    logging.info(f"Early stopping en epoch {epoch+1}")
+                    logging.info(
+                        f"Early stopping en epoch {epoch+1} "
+                        f"(F1-macro no mejoró durante {patience} épocas)"
+                    )
                     break
 
         if best_state is not None:
             self.model.load_state_dict(best_state)
             self.model = self.model.to(device)
 
-        return {"best_val_acc": best_acc, "epochs_trained": epoch + 1}
+        return {
+            "best_val_acc": float(val_acc),
+            "best_f1_macro": float(best_f1_macro),
+            "epochs_trained": epoch + 1,
+        }
 
     def save(self, path: str) -> None:
         """Guarda el modelo en disco."""
