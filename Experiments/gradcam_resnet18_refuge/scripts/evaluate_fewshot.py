@@ -110,9 +110,12 @@ def evaluate_model(
         "percentiles": percentiles,
         "metrics_per_sample": [],
         "iou_by_percentile": {p: [] for p in percentiles},
+        "dice_by_percentile": {p: [] for p in percentiles},
         "ssim_by_percentile": {p: [] for p in percentiles},
         "pointing_by_percentile": {p: [] for p in percentiles},
     }
+    img_count = 0
+    total_images = len(val_loader.dataset)
     
     # Para subset de visualización
     all_samples = []
@@ -149,13 +152,18 @@ def evaluate_model(
                 
                 for p in percentiles:
                     gradcam_binary = (gradcam >= np.percentile(gradcam, p)).astype(np.float32)
-                    metrics = extractor.compute_metrics(gradcam_binary, gt_mask)
+                    # Pasar heatmap continuo para SSIM y pointing accuracy
+                    metrics = extractor.compute_metrics(
+                        gradcam_binary, gt_mask, gradcam_heatmap=gradcam
+                    )
                     
                     sample_result[f"iou_p{p}"] = metrics["iou"]
+                    sample_result[f"dice_p{p}"] = metrics["dice"]
                     sample_result[f"ssim_p{p}"] = metrics["ssim"]
                     sample_result[f"pointing_p{p}"] = metrics["pointing_accuracy"]
                     
                     results["iou_by_percentile"][p].append(metrics["iou"])
+                    results["dice_by_percentile"][p].append(metrics["dice"])
                     results["ssim_by_percentile"][p].append(metrics["ssim"])
                     results["pointing_by_percentile"][p].append(metrics["pointing_accuracy"])
                     
@@ -168,17 +176,24 @@ def evaluate_model(
                 
                 results["metrics_per_sample"].append(sample_result)
                 sample_metrics.append((image_id, label, best_iou, gradcam, gt_mask))
+                
+                img_count += 1
+                if img_count % 50 == 0:
+                    logging.info(f"  Procesadas {img_count}/{total_images} imágenes...")
     
     # Calcular estadísticas agregadas
     summary = {}
     for p in percentiles:
         ious = results["iou_by_percentile"][p]
+        dices = results["dice_by_percentile"][p]
         ssims = results["ssim_by_percentile"][p]
         pointings = results["pointing_by_percentile"][p]
         
         summary[f"p{p}"] = {
             "iou_mean": float(np.mean(ious)),
             "iou_std": float(np.std(ious)),
+            "dice_mean": float(np.mean(dices)),
+            "dice_std": float(np.std(dices)),
             "ssim_mean": float(np.mean(ssims)),
             "ssim_std": float(np.std(ssims)),
             "pointing_accuracy": float(np.mean(pointings)),

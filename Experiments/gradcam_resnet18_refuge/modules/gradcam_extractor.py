@@ -698,12 +698,22 @@ class GradCAMExtractor(nn.Module):
         Returns:
             heatmap: ndarray (H, W) con valores en [0, 1]
         """
+        # Cachear si la librería externa está disponible (evitar 400 ImportErrors)
+        if not hasattr(self, "_external_available"):
+            self._external_available = None  # None = no probado aún
+
         use_external = self.config.get("gradcam", {}).get("use_external", True)
-        if use_external:
+        if use_external and self._external_available is not False:
             try:
-                return self._get_gradcam_external(image)
+                result = self._get_gradcam_external(image)
+                self._external_available = True
+                return result
             except Exception as e:
-                logging.warning(f"pytorch-grad-cam falló ({e}), usando manual fallback")
+                self._external_available = False
+                logging.warning(
+                    f"pytorch-grad-cam no disponible ({e}), "
+                    f"usando implementación manual para todas las imágenes"
+                )
         return self._get_gradcam_manual(image)
 
     @torch.enable_grad()
@@ -807,33 +817,54 @@ class GradCAMExtractor(nn.Module):
         return {"prediction": "glaucoma" if pred_class == 1 else "normal", "distribution": dist}
 
     def compute_metrics(
-        self, gradcam_mask: np.ndarray, gt_mask: np.ndarray
+        self,
+        gradcam_mask: np.ndarray,
+        gt_mask: np.ndarray,
+        gradcam_heatmap: Optional[np.ndarray] = None,
     ) -> dict:
         """
-        Calcula IoU, SSIM y pointing accuracy entre Grad-CAM y máscara GT.
+        Calcula IoU, Dice, SSIM y pointing accuracy entre Grad-CAM y máscara GT.
 
         Args:
             gradcam_mask: ndarray binario (H, W) del Grad-CAM binarizado
             gt_mask: ndarray binario (H, W) de la máscara GT (0=bg, 1=OD)
+            gradcam_heatmap: ndarray continuo (H, W) en [0,1] del Grad-CAM
+                             original (antes de binarizar). Se usa para SSIM
+                             y pointing accuracy. Si es None, usa gradcam_mask.
 
         Returns:
-            dict con "iou", "ssim", "pointing_accuracy"
+            dict con "iou", "dice", "ssim", "pointing_accuracy"
         """
         gt_binary = (gt_mask > 0).astype(np.float32)
 
+        # IoU: TP / (TP + FP + FN)
         tp = np.sum((gradcam_mask == 1) & (gt_binary == 1))
         fp = np.sum((gradcam_mask == 1) & (gt_binary == 0))
         fn = np.sum((gradcam_mask == 0) & (gt_binary == 1))
         iou = tp / (tp + fp + fn + 1e-8)
 
-        gradcam_normalized = gradcam_mask
-        ssim = self.ssim_calc.compute_ssim(gradcam_normalized, gt_binary)
+        # Dice: 2·TP / (2·TP + FP + FN)
+        dice = (2 * tp) / (2 * tp + fp + fn + 1e-8)
 
-        max_pos = np.unravel_index(np.argmax(gradcam_mask), gradcam_mask.shape)
+        # SSIM: usar heatmap continuo [0,1] vs GT para similitud estructural
+        # (comparar binario vs binario no es informativo)
+        ssim_input = gradcam_heatmap if gradcam_heatmap is not None else gradcam_mask
+        ssim = self.ssim_calc.compute_ssim(ssim_input, gt_binary)
+
+        # Pointing Accuracy: el máximo del heatmap CONTINUO debe caer
+        # dentro del optic disc. Se usa heatmap, no máscara binaria,
+        # porque argmax de binaria da el primer pixel=1 en orden row-major.
+        pointing_input = gradcam_heatmap if gradcam_heatmap is not None else gradcam_mask
+        max_pos = np.unravel_index(np.argmax(pointing_input), pointing_input.shape)
         pointing_inside = bool(gt_binary[max_pos] == 1)
         pointing_acc = 1.0 if pointing_inside else 0.0
 
-        return {"iou": float(iou), "ssim": float(ssim), "pointing_accuracy": float(pointing_acc)}
+        return {
+            "iou": float(iou),
+            "dice": float(dice),
+            "ssim": float(ssim),
+            "pointing_accuracy": float(pointing_acc),
+        }
 
     def _compute_f1_per_class(
         self, preds: np.ndarray, labels: np.ndarray, num_classes: int = 2
