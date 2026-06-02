@@ -351,15 +351,15 @@ class RefugeDataModule:
 
             logging.info(f"Split '{split}' → {split_dir}")
 
-            images_dir = split_dir / "Images_Cropped"
+            images_dir = split_dir / "Images"
             if not images_dir.exists():
-                images_dir = split_dir / "Images"
+                images_dir = split_dir / "Images_Cropped"
             if not images_dir.exists():
                 images_dir = split_dir / "images"
 
-            masks_dir = split_dir / "Masks_Cropped"
+            masks_dir = split_dir / "Masks"
             if not masks_dir.exists():
-                masks_dir = split_dir / "Masks"
+                masks_dir = split_dir / "Masks_Cropped"
             if not masks_dir.exists():
                 masks_dir = split_dir / "masks"
 
@@ -369,6 +369,24 @@ class RefugeDataModule:
 
             logging.info(f"  Images dir: {images_dir} (exists={images_dir.exists()})")
             logging.info(f"  Masks dir: {masks_dir} (exists={masks_dir.exists()})")
+
+            # Cargar labels desde index.json si existe (para val/test)
+            index_labels = {}
+            index_path = split_dir / "index.json"
+            if index_path.exists():
+                try:
+                    with open(index_path) as f:
+                        index_data = json.load(f)
+                    for entry in index_data.values():
+                        if isinstance(entry, dict):
+                            img_name = entry.get("ImgName", "")
+                            label_val = entry.get("Label", entry.get("label", -1))
+                            if img_name and label_val != -1:
+                                # 0 = normal, 1 = glaucoma
+                                index_labels[img_name] = "glaucoma" if label_val == 1 else "normal"
+                    logging.info(f"  Cargados {len(index_labels)} labels desde index.json")
+                except Exception as e:
+                    logging.warning(f"  Error leyendo index.json: {e}")
 
             # Buscar imágenes con varias extensiones
             img_paths = []
@@ -380,10 +398,16 @@ class RefugeDataModule:
 
             for img_path in img_paths:
                 img_id = img_path.stem
-                # Detectar si es glaucoma por prefijo o por carpeta
-                label = "glaucoma" if img_path.stem.startswith("g") else "normal"
-
                 img_name = img_path.name
+                
+                # Detectar label: primero index.json, luego prefijo del nombre
+                if img_name in index_labels:
+                    label = index_labels[img_name]
+                elif img_path.stem.startswith("g"):
+                    label = "glaucoma"
+                else:
+                    label = "normal"
+
                 # Inferir nombre de máscara (misma base, extensión .png)
                 mask_name = img_path.stem + ".png"
 
