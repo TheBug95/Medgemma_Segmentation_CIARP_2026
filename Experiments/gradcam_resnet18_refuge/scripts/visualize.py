@@ -96,23 +96,3 @@ def plot_gradcam_vs_gt(
     plt.close(fig)
 
 
-def plot_batch_comparison(
-    images: np.ndarray,
-    gradcams: np.ndarray,
-    gt_masks: np.ndarray,
-    image_ids: list[str],
-    save_dir: str = None,
-    figure_prefix: str = "sample",
-) -> None:
-    """Genera visualizaciones para un batch de imágenes."""
-    for i, img_id in enumerate(image_ids):
-        save_path = None
-        if save_dir:
-            save_path = str(Path(save_dir) / f"{figure_prefix}_{img_id}.png")
-        plot_gradcam_vs_gt(
-            images[i],
-            gradcams[i],
-            gt_masks[i],
-            img_id,
-            save_path=save_path,
-        )

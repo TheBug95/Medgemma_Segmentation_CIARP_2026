@@ -33,16 +33,6 @@ classifier:
   scheduler_factor: 0.5
   scheduler_patience: 3
 
-augmentations:
-  horizontal_flip: true
-  rotation_degrees: 15
-  color_jitter_brightness: 0.1
-  color_jitter_contrast: 0.1
-  random_erasing: true
-  random_erasing_p: 0.2
-  mixup: true
-  mixup_alpha: 0.2
-
 gradcam:
   # Capa objetivo para Grad-CAM (ResNet18: layer4[-1].conv2)
   target_layer: "layer4[-1].conv2"
