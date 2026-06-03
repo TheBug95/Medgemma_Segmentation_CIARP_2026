@@ -762,8 +762,8 @@ class GradCAMExtractor(nn.Module):
     def _get_gradcam_external(self, image: torch.Tensor) -> np.ndarray:
         """Grad-CAM usando pytorch-gradcam con auto-install si no esta disponible."""
         try:
-            from pytorch_gradcam import GradCAM
-            from pytorch_gradcam.utils.model_targets import ClassifierOutputTarget
+            from gradcam import GradCAM
+            from gradcam.utils.model_targets import ClassifierOutputTarget
         except ImportError:
             logging.warning(
                 "pytorch-gradcam no instalado. Instalando automaticamente..."
@@ -774,8 +774,8 @@ class GradCAMExtractor(nn.Module):
             subprocess.check_call(
                 [sys.executable, "-m", "pip", "install", "pytorch-gradcam", "-q"]
             )
-            from pytorch_gradcam import GradCAM
-            from pytorch_gradcam.utils.model_targets import ClassifierOutputTarget
+            from gradcam import GradCAM
+            from gradcam.utils.model_targets import ClassifierOutputTarget
 
         device = next(self.model.parameters()).device
         image_batch = image.unsqueeze(0).to(device)
