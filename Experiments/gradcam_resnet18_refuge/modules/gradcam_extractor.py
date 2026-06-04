@@ -767,8 +767,14 @@ class GradCAMExtractor(nn.Module):
 
         return heatmap
 
+    @torch.enable_grad()
     def _get_gradcam_external(self, image: torch.Tensor) -> np.ndarray:
-        """Grad-CAM usando pytorch-grad-cam con auto-install si no esta disponible."""
+        """Grad-CAM usando pytorch-grad-cam con auto-install si no esta disponible.
+
+        Requiere @torch.enable_grad() porque este método puede ser invocado
+        durante evaluación (dentro de torch.no_grad()), pero pytorch_grad_cam
+        necesita hacer backward internamente para computar los gradientes.
+        """
         try:
             from pytorch_grad_cam import GradCAM
             from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
@@ -786,9 +792,11 @@ class GradCAMExtractor(nn.Module):
             from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
         device = next(self.model.parameters()).device
-        image_batch = image.unsqueeze(0).to(device)
+        # requires_grad=True es necesario para que pytorch_grad_cam
+        # pueda computar gradientes en el backward pass
+        image_batch = image.unsqueeze(0).to(device).requires_grad_(True)
 
-        # Determinar clase predicha
+        # Determinar clase predicha (sin gradientes, solo inferencia)
         with torch.no_grad():
             pred_class = self.model(image_batch).argmax(dim=1).item()
 
