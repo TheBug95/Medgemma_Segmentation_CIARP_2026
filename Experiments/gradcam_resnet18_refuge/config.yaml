@@ -29,13 +29,19 @@ classifier:
   backbone: "resnet18"
   num_classes: 2  # glaucoma, normal
   pretrained: true
-  # Training hyperparameters
+  # Training hyperparameters (defaults si no hay seccion few_shot)
   epochs: 30
   lr: 0.0001
   weight_decay: 0.0001
-  patience: 5
+  patience: 10
   scheduler_factor: 0.5
   scheduler_patience: 3
+
+# Configuracion few-shot: sobreescribe classifier.epochs/patience al ejecutar
+# scripts/train_fewshot.py
+few_shot:
+  epochs: 30
+  patience: 10
 
 gradcam:
   # Capa objetivo para Grad-CAM (ResNet18: layer4[-1], el BasicBlock completo)
