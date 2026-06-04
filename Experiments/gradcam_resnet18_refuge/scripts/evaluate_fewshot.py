@@ -245,7 +245,9 @@ def evaluate_model(
         if not sample_info:
             continue
             
-        image_path = data_module.data_dir / sample_info.get("split", "val") / "Images" / sample_info["image_filename"]
+        image_path = data_module.data_dir / sample_info.get("split", "val") / "Images_Cropped" / sample_info["image_filename"]
+        if not image_path.exists():
+            image_path = data_module.data_dir / sample_info.get("split", "val") / "Images" / sample_info["image_filename"]
         
         from PIL import Image
         img = Image.open(image_path).convert("RGB")

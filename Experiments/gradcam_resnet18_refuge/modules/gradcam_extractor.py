@@ -338,8 +338,12 @@ class RefugeDataset(Dataset):
         label = 1 if sample["label"] == "glaucoma" else 0
 
         image_path = (
-            self.data_dir / sample["split"] / "Images" / sample["image_filename"]
+            self.data_dir / sample["split"] / "Images_Cropped" / sample["image_filename"]
         )
+        if not image_path.exists():
+            image_path = (
+                self.data_dir / sample["split"] / "Images" / sample["image_filename"]
+            )
         mask_path = self.data_dir / sample["mask_path"]
 
         image = Image.open(image_path).convert("RGB")
@@ -543,9 +547,9 @@ class RefugeDataModule:
             if not images_dir.exists():
                 images_dir = split_dir / "images"
 
-            masks_dir = split_dir / "Masks"
+            masks_dir = split_dir / "Masks_Cropped"
             if not masks_dir.exists():
-                masks_dir = split_dir / "Masks_Cropped"
+                masks_dir = split_dir / "Masks"
             if not masks_dir.exists():
                 masks_dir = split_dir / "masks"
 
