@@ -58,6 +58,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
+import cv2
 import numpy as np
 import torch
 import torch.nn as nn
@@ -77,6 +78,127 @@ def set_global_seed(seed: int) -> None:
     torch.cuda.manual_seed_all(seed)
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+
+# =============================================================================
+# Fundus Auto-Crop
+# =============================================================================
+
+
+def crop_fundus_image(
+    image: np.ndarray,
+    mask: Optional[np.ndarray] = None,
+    threshold: int = 15,
+    margin_ratio: float = 0.02,
+) -> tuple[np.ndarray, Optional[np.ndarray]]:
+    """
+    Detecta la región circular del fundus y recorta al bounding box cuadrado.
+
+    En imágenes de fondo de ojo, la fotografía muestra un disco circular
+    sobre un fondo negro. Este método detecta dicha región y recorta tanto
+    la imagen como la máscara (si se proporciona) al bounding box del fundus,
+    con un margen de seguridad configurable.
+
+    Algoritmo:
+      1. Convertir a escala de grises (canal verde para mayor contraste)
+      2. Umbralizar para separar fundus del fondo negro
+      3. Operaciones morfológicas para limpiar ruido
+      4. Encontrar el contorno más grande (el disco del fundus)
+      5. Calcular bounding box cuadrado centrado + margen
+      6. Recortar imagen y máscara con las mismas coordenadas
+
+    Args:
+        image: ndarray (H, W, 3) imagen RGB, valores uint8 [0, 255]
+                o float32 [0, 1]
+        mask: ndarray (H, W) máscara GT, mismas dimensiones que la imagen.
+              Si es None, solo se recorta la imagen.
+        threshold: umbral para binarizar el canal verde.
+                   Para float32 [0,1] se escala automáticamente.
+        margin_ratio: fracción del lado mayor del bbox a añadir como margen
+                      de seguridad (0.02 = 2%)
+
+    Returns:
+        (image_cropped, mask_cropped): tupla con imagen y máscara recortadas.
+        Si mask era None, mask_cropped es None.
+        Si no se detecta el fundus, retorna la imagen y máscara originales.
+    """
+    h, w = image.shape[:2]
+
+    # Detectar si la imagen está en float [0,1] o uint8 [0,255]
+    is_float = image.dtype == np.float32 or image.dtype == np.float64
+    if is_float:
+        # Convertir temporalmente a uint8 para la detección
+        img_u8 = (np.clip(image, 0, 1) * 255).astype(np.uint8)
+    else:
+        img_u8 = image.copy()
+
+    # Usar canal verde (índice 1) por mayor contraste en fundoscopia
+    if len(img_u8.shape) == 3:
+        gray = img_u8[:, :, 1]
+    else:
+        gray = img_u8
+
+    # Binarizar: fundus = pixeles con intensidad > threshold
+    _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+
+    # Operaciones morfológicas para limpiar ruido y cerrar huecos
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))
+    binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+
+    # Encontrar contornos y seleccionar el más grande
+    contours, _ = cv2.findContours(
+        binary, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+    )
+
+    if not contours:
+        logging.warning(
+            "crop_fundus_image: no se detectó región del fundus, "
+            "retornando imagen original sin recortar"
+        )
+        return image, mask
+
+    # El contorno más grande debería ser el disco del fundus
+    largest = max(contours, key=cv2.contourArea)
+    x, y, bw, bh = cv2.boundingRect(largest)
+
+    # Verificar que el contorno sea suficientemente grande
+    # (al menos 10% del área de la imagen, para descartar artefactos)
+    if (bw * bh) < (h * w * 0.1):
+        logging.warning(
+            f"crop_fundus_image: contorno detectado muy pequeño "
+            f"({bw}x{bh} vs {w}x{h}), retornando imagen original"
+        )
+        return image, mask
+
+    # Hacer el bounding box cuadrado (centrado en el rectángulo original)
+    side = max(bw, bh)
+    cx, cy = x + bw // 2, y + bh // 2
+
+    # Añadir margen de seguridad
+    margin = int(side * margin_ratio)
+    half_side = side // 2 + margin
+
+    # Calcular coordenadas con clipping a los bordes de la imagen
+    x1 = max(0, cx - half_side)
+    y1 = max(0, cy - half_side)
+    x2 = min(w, cx + half_side)
+    y2 = min(h, cy + half_side)
+
+    # Recortar imagen
+    image_cropped = image[y1:y2, x1:x2]
+
+    # Recortar máscara con las mismas coordenadas
+    mask_cropped = None
+    if mask is not None:
+        mask_cropped = mask[y1:y2, x1:x2]
+
+    logging.debug(
+        f"crop_fundus_image: recortado de ({w}x{h}) a "
+        f"({x2-x1}x{y2-y1}), bbox=({x1},{y1},{x2},{y2})"
+    )
+
+    return image_cropped, mask_cropped
 
 
 # =============================================================================
@@ -163,12 +285,14 @@ class RefugeDataset(Dataset):
         split: str = "train",
         transform: Optional[transforms.Compose] = None,
         cache_in_memory: bool = True,
+        auto_crop: bool = False,
     ):
         self.data_dir = Path(data_dir)
         self.image_size = image_size
         self.split = split
         self.transform = transform
         self.cache_in_memory = cache_in_memory
+        self.auto_crop = auto_crop
 
         self.samples = []
         for img_id, info in annotations.items():
@@ -221,6 +345,18 @@ class RefugeDataset(Dataset):
         image = Image.open(image_path).convert("RGB")
         mask = Image.open(mask_path).convert("L")
 
+        # Auto-crop: detectar región del fundus y recortar antes del resize.
+        # Se aplica ANTES del resize para que el modelo reciba solo la ROI
+        # del fundus sin bordes negros, independiente del dataset.
+        if self.auto_crop:
+            image_np_raw = np.array(image, dtype=np.uint8)
+            mask_np_raw = np.array(mask, dtype=np.uint8)
+            image_np_raw, mask_np_raw = crop_fundus_image(
+                image_np_raw, mask_np_raw
+            )
+            image = Image.fromarray(image_np_raw)
+            mask = Image.fromarray(mask_np_raw)
+
         image = image.resize(self.image_size, Image.BILINEAR)
         mask = mask.resize(self.image_size, Image.NEAREST)
 
@@ -264,6 +400,9 @@ class RefugeDataModule:
         self.batch_size = config["data"].get("batch_size", 16)
         self.num_workers = config["data"].get("num_workers", 2)
         self.test_split = config["data"].get("test_split", "test")
+        # Auto-crop: detectar y recortar región del fundus automáticamente.
+        # Desactivado por defecto para datasets pre-cropped (ej: REFUGE).
+        self.auto_crop = config["data"].get("auto_crop", False)
 
         logging.info(f"Usando data_dir: {self.data_dir}")
         self._load_annotations()
@@ -501,6 +640,7 @@ class RefugeDataModule:
             image_size=self.image_size,
             split=self.config["data"].get("train_split", "train"),
             transform=self.train_transform,
+            auto_crop=self.auto_crop,
         )
         return DataLoader(
             dataset,
@@ -518,6 +658,7 @@ class RefugeDataModule:
             image_size=self.image_size,
             split=self.config["data"].get("val_split", "val"),
             transform=self.val_transform,
+            auto_crop=self.auto_crop,
         )
         return DataLoader(
             dataset,
@@ -535,6 +676,7 @@ class RefugeDataModule:
             image_size=self.image_size,
             split=self.test_split,
             transform=self.val_transform,
+            auto_crop=self.auto_crop,
         )
         return DataLoader(
             dataset,
@@ -618,6 +760,7 @@ class RefugeDataModule:
             image_size=self.image_size,
             split=train_split,
             transform=self.train_transform,
+            auto_crop=self.auto_crop,
         )
         return DataLoader(
             dataset,
