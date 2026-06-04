@@ -28,7 +28,7 @@
 # GRAD-CAM PROCEDURE:
 #   1. Forward pass con imagen (3, 448, 448)
 #   2. Backward pass en la clase predicha
-#   3. Pooled gradients × activations de layer4[-1].conv2
+#   3. Pooled gradients × activations de layer4[-1]
 #   4. ReLU → heatmap sin normalizar
 #   5. Normalizar a [0, 1]
 #   6. Binarizar con percentil 95
@@ -49,7 +49,7 @@
 #       "lr": 1e-4,
 #       "weight_decay": 1e-5,
 #       "patience": 5,
-#       "gradcam": {"target_layer": "layer4[-1].conv2", "percentile": 95}
+#       "gradcam": {"target_layer": "layer4[-1]", "percentile": 95}
 #   }
 # =============================================================================
 
@@ -662,8 +662,15 @@ class GradCAMExtractor(nn.Module):
         self.ssim_calc = SSIMCalculator()
 
     def _get_target_layer(self) -> nn.Module:
-        """Retorna la capa objetivo para Grad-CAM."""
-        return self.model.layer4[-1].conv2
+        """Retorna la capa objetivo para Grad-CAM.
+
+        Para ResNet18 la capa correcta es layer4[-1] (el BasicBlock completo),
+        NO layer4[-1].conv2. Esto captura las activaciones post-residual,
+        post-BatchNorm y post-ReLU, alineado con el paper original de
+        Selvaraju et al. (2017) y con la implementación del notebook
+        CAM_generation.ipynb.
+        """
+        return self.model.layer4[-1]
 
     def _register_hooks(self) -> None:
         """Registra hooks para capturar gradientes y activaciones."""
@@ -749,7 +756,8 @@ class GradCAMExtractor(nn.Module):
             heatmap = (heatmap - heatmap.min()) / (heatmap.max() - heatmap.min() + 1e-8)
 
         # Suavizado gaussiano configurable (similar a aug_smooth/eigen_smooth)
-        sigma = self.config.get("gradcam", {}).get("sigma_smooth", 2.0)
+        # Suavizado gaussiano: 0.0 por defecto (Grad-CAM canónico sin post-blur)
+        sigma = self.config.get("gradcam", {}).get("sigma_smooth", 0.0)
         if sigma > 0:
             from scipy.ndimage import gaussian_filter
             heatmap = gaussian_filter(heatmap, sigma=sigma)
@@ -760,22 +768,22 @@ class GradCAMExtractor(nn.Module):
         return heatmap
 
     def _get_gradcam_external(self, image: torch.Tensor) -> np.ndarray:
-        """Grad-CAM usando pytorch-gradcam con auto-install si no esta disponible."""
+        """Grad-CAM usando pytorch-grad-cam con auto-install si no esta disponible."""
         try:
-            from gradcam import GradCAM
-            from gradcam.utils.model_targets import ClassifierOutputTarget
+            from pytorch_grad_cam import GradCAM
+            from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
         except ImportError:
             logging.warning(
-                "pytorch-gradcam no instalado. Instalando automaticamente..."
+                "pytorch-grad-cam no instalado. Instalando automaticamente..."
             )
             import subprocess
             import sys
 
             subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", "pytorch-gradcam", "-q"]
+                [sys.executable, "-m", "pip", "install", "grad-cam", "-q"]
             )
-            from gradcam import GradCAM
-            from gradcam.utils.model_targets import ClassifierOutputTarget
+            from pytorch_grad_cam import GradCAM
+            from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
         device = next(self.model.parameters()).device
         image_batch = image.unsqueeze(0).to(device)
