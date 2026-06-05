@@ -128,7 +128,8 @@ MedGemma recibe 2 entradas: imagen y prompt. Las condiciones varían qué se env
 - **SSIM:** similitud estructural entre máscara predicha y GT
 
 ### Texto (varían por condición)
-- **BERTScore (F1):** usando BiomedBERT
+- **BERTScore (F1):** usando microsoft/BiomedNLP-BiomedBERT-base-uncased-abstract-fulltext
+- **sBERT (Sentence-BERT):** usando NeuML/bioclinical-modernbert-base-embeddings
 - **Precisión de hallazgo:** ¿el texto menciona la patología correcta? (bool)
 - **Likert 1-5:** evaluación manual por oftalmólogo (cuando disponible)
 

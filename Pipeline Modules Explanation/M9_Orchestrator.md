@@ -76,7 +76,7 @@ Cada ejecución produce un texto descriptivo. En total: 3 máscaras × 6 condici
 
 Para cada uno de los 18 textos:
 - Métricas de segmentación: IoU, Dice, SSIM de la máscara usada vs la GT
-- Métricas de texto: BERTScore y precisión de hallazgo del texto vs la descripción del experto
+- Métricas de texto: BERTScore, sBERT y precisión de hallazgo del texto vs la descripción del experto
 
 ---
 
@@ -104,7 +104,7 @@ results/
 Cada archivo JSON contiene una lista de resultados, uno por imagen:
 - `image_id`: identificador de la imagen
 - `segmentation_metrics`: {iou, dice, ssim}
-- `text_metrics`: {bertscore_f1, finding_mentioned}
+- `text_metrics`: {bertscore_f1, sbert_similarity, finding_mentioned}
 - `generated_text`: el texto producido por MedGemma
 - `prompt_used`: el prompt exacto enviado
 - `classification`: {prediction, distribution}
@@ -124,7 +124,7 @@ Se calcula el promedio ± desviación estándar de cada métrica por configuraci
 
 | | A | B | C1 | C2 | D1 | D2 |
 |---|---|---|---|---|---|---|
-| **LoRA** | BERTScore ± σ | ... | ... | ... | ... | ... |
+| **LoRA** | BERTScore ± σ, sBERT ± σ | ... | ... | ... | ... | ... |
 | **WSSS** | ... | ... | ... | ... | ... | ... |
 | **FSL/FD** | ... | ... | ... | ... | ... | ... |
 
@@ -154,7 +154,7 @@ El Orchestrator debe gestionar la VRAM porque no todos los modelos caben simult�
 2. Al terminar paso 1B para todas las imágenes: **descargar SAM** de la GPU
 3. **Cargar MedGemma** para el paso 2
 4. Al terminar paso 2: **descargar MedGemma**
-5. **Cargar BERTScore** para el paso 3
+5. **Cargar BERTScore y sBERT** para el paso 3
 
 Alternativamente, procesar imagen por imagen cargando y descargando modelos según se necesitan (más lento pero usa menos VRAM).
 

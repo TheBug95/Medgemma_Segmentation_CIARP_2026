@@ -1,0 +1,95 @@
+# =============================================================================
+# CONFIG.YAML - Experimento Grad-CAM con ResNet18 en REFUGE
+# =============================================================================
+# Extracción de Grad-CAM y evaluación vs máscara GT en dataset REFUGE
+# =============================================================================
+
+seed: 42
+
+data:
+  # Ruta base al dataset REFUGE (carpeta que contiene train/val/test)
+  # NOTA: Si usas Google Colab, esta ruta se resuelve automáticamente
+  # buscando en ubicaciones comunes. También puedes usar:
+  #   --data-dir /content/drive/MyDrive/.../REFUGE
+  data_dir: "../../Datasets/REFUGE"
+  # Split a usar para entrenamiento y evaluación
+  train_split: "train"
+  val_split: "val"
+  test_split: "test"
+  # Tamaño de imagen para CNN (resized antes de entrar al modelo)
+  image_size: [448, 448]
+  batch_size: 16
+  num_workers: 0
+  # Auto-crop: detectar región circular del fundus y recortar antes del resize.
+  # Activar para datasets sin pre-crop (imágenes con bordes negros).
+  # Desactivar para datasets pre-cropped como REFUGE.
+  auto_crop: false
+
+classifier:
+  backbone: "resnet18"
+  num_classes: 2  # glaucoma, normal
+  pretrained: true
+  # Training hyperparameters (defaults si no hay seccion few_shot)
+  epochs: 30
+  lr: 0.0001
+  weight_decay: 0.0001
+  patience: 10
+  scheduler_factor: 0.5
+  scheduler_patience: 3
+
+# Configuracion few-shot: sobreescribe classifier.epochs/patience al ejecutar
+# scripts/train_fewshot.py
+few_shot:
+  epochs: 30
+  patience: 10
+
+gradcam:
+  # Capa objetivo para Grad-CAM (ResNet18: layer4[-1], el BasicBlock completo)
+  target_layer: "layer4[-1]"
+  # Percentil para binarizar el heatmap de Grad-CAM
+  percentile: 95
+  # Usar pytorch-grad-cam (librería externa) si está disponible
+  # Si es false, usa implementación manual con hooks
+  use_external: true
+  # Suavizado gaussiano post-proceso (0 = desactivado, Grad-CAM canónico)
+  sigma_smooth: 0.0
+
+visualization:
+  # Número de muestras a visualizar (0 = ninguna)
+  num_samples: 20
+  # Guardar visualización en disco
+  save_images: true
+  # Mostrar en pantalla (plt.show())
+  show_images: false
+  #.Tamaño de figura (width, height) en pulgadas
+  figure_size: [12, 10]
+
+output:
+  # Directorio donde se guardan resultados
+  output_dir: "./output"
+  visualizations_dir: "./visualizations"
+
+# =============================================================================
+# FORMATO DE annotations.json (esperado en data_dir):
+# {
+#   "image_id": {
+#     "image_filename": "g0001.jpg",
+#     "label": "glaucoma",
+#     "mask_path": "Datasets/REFUGE/train/Masks/g0001.png",
+#     "split": "train"
+#   }
+# }
+#
+# FORMATO DE splits.json:
+# {
+#   "train": ["image_id_1", "image_id_2", ...],
+#   "val": ["image_id_X", ...],
+#   "test": ["image_id_Y", ...]
+# }
+#
+# FORMATO DE MÁSCARAS GT:
+#   0 = Background
+#   1 = Rim (neuroretinal border)
+#   2 = Cup (optic cup)
+#   Binaria: mask > 0 → 1 (optic disc)
+# =============================================================================

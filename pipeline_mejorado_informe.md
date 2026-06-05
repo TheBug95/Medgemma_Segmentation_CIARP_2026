@@ -294,6 +294,7 @@ the highlighted region and its relationship with the suggested diagnosis.
 | Métrica | Qué mide |
 |---------|----------|
 | **BERTScore** | Similitud semántica vs texto de referencia |
+| **sBERT** | Similitud semántica usando embeddings clínicos |
 | **Precisión de hallazgos** | ¿Menciona la patología correcta? |
 | **Likert 1-5** | Calidad clínica (evaluación por oftalmólogo) |
 
@@ -306,7 +307,7 @@ the highlighted region and its relationship with the suggested diagnosis.
 | **🔵 FSL/FD** | FSL-A | FSL-B | FSL-C1 | FSL-C2 | FSL-D1 | FSL-D2 |
 
 > [!IMPORTANT]
-> Dentro de cada fila, las métricas de segmentación **(IoU, Dice, SSIM) son constantes**. Lo que varía entre columnas es el **BERTScore del texto**.
+> Dentro de cada fila, las métricas de segmentación **(IoU, Dice, SSIM) son constantes**. Lo que varía entre columnas son las **métricas de texto (BERTScore, sBERT)**.
 
 ### Comparaciones experimentales
 
