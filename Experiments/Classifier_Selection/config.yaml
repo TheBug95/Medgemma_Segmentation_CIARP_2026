@@ -40,9 +40,8 @@ classifier:
 # Few-shot experiment - mismo sampling para todos los backbones
 few_shot:
   # Tamaños del support set a evaluar.
-  # RESTRICCIÓN: El support set es EXCLUSIVAMENTE de glaucoma (clase minoritaria).
-  # En train solo hay 40 imágenes con glaucoma → máximo factible es N < 40.
-  # Se usan N=25, 30, 35 para cubrir el rango disponible con margen de seguridad.
+  # El support set es BALANCED: N glaucoma + N normales.
+  # En REFUGE/train hay 40 glaucoma → N=25, 30, 35 (todos < 40).
   n_samples: [25, 30, 35]
   # Lista de seeds para las 5 iteraciones del experimento.
   # REGLA: en la iteración i, TODOS los backbones usan seeds[i].
@@ -51,7 +50,11 @@ few_shot:
   # comparación entre backbones justa y estadísticamente válida.
   # Los resultados finales se reportan como mean ± std sobre las 5 iteraciones.
   seeds: [42, 123, 456, 789, 1024]
-  support_mode: glaucoma_only # o glaucoma_plus_all_normal o balanced (N glaucoma, N normales)
+  # Composición del support set. "balanced" = N glaucoma + N normales
+  # (clínica y matemáticamente la única composición entrenable con
+  # CrossEntropy: glaucoma_only colapsa el clasificador a predecir la
+  # única clase vista). Ver SPEC §6.
+  support_mode: balanced
 
 # Augmentations (solo train)
 augmentations:
@@ -61,7 +64,9 @@ augmentations:
   color_jitter_contrast: 0.1
   random_erasing: true
   random_erasing_p: 0.2
-  mixup: true
+  # mixup desactivado: requiere soft-target loss y no aporta al score
+  # de selección. Dejado apagado para mantener el loop de train simple.
+  mixup: false
   mixup_alpha: 0.2
 
 # Grad-CAM

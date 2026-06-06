@@ -7,7 +7,7 @@ Seleccionar el mejor backbone CNN (ResNet-18, EfficientNet-B0, DenseNet-121) par
 - Few-shot F1-macro con N=25, 30, 35 (support set exclusivo de glaucoma, 5 iteraciones con seeds compartidas)
 - Costo computacional (parámetros, VRAM, tiempo de inferencia)
 
-> **Nota:** No se realiza training completo. El support set es exclusivamente de glaucoma (clase minoritaria de interés). En REFUGE/train hay 40 glaucomas → N=25, 30, 35. Se corren 5 iteraciones; en cada una todos los backbones usan la misma seed.
+> **Nota:** No se realiza training completo. El support set es **balanced**: N glaucoma + N normales (composición única entrenable con CrossEntropy; con `glaucoma_only` el clasificador colapsa a predecir la única clase vista). En REFUGE/train hay 40 glaucomas → N=25, 30, 35. Se corren 5 iteraciones; en cada una todos los backbones usan la misma seed.
 
 ---
 
@@ -30,7 +30,7 @@ Seleccionar el mejor backbone CNN (ResNet-18, EfficientNet-B0, DenseNet-121) par
 - **Labels:** `index.json` campo `Label` (1=glaucoma, 0=normal)
 
 > **Restricción del support set:** Solo hay **40 imágenes de glaucoma** en train.
-> El support set es exclusivamente de glaucoma (clase de interés y clase minoritaria).
+> El support set es **balanced** (N glaucoma + N normales muestreadas con la misma seed).
 > Esto limita los tamaños factibles a N < 40, de ahí N=25, 30, 35.
 
 ### Mapeo al Schema del Proyecto
@@ -108,7 +108,8 @@ Esto garantiza dos propiedades esenciales:
 ```python
 SEEDS = [42, 123, 456, 789, 1024]  # Definidas en config.yaml: few_shot.seeds
 
-# Restricción: el support set es solo glaucoma (40 muestras disponibles en train)
+# Restricción: el support set es balanced (N glaucoma + N normales).
+# En REFUGE/train hay 40 glaucoma y 360 normales → N < 40 limita el lado glaucoma.
 # N=25 → 62.5% de los glaucoma disponibles
 # N=30 → 75.0% de los glaucoma disponibles
 # N=35 → 87.5% de los glaucoma disponibles
@@ -120,10 +121,14 @@ SEEDS = [42, 123, 456, 789, 1024]  # Definidas en config.yaml: few_shot.seeds
 for i, seed in enumerate(SEEDS):            # i = 0..4
     for backbone in backbones:               # mismo seed para TODOS en esta iteración
         glaucoma_ids = get_glaucoma_indices(data_module, split='train')  # 40 IDs
+        normal_ids   = get_normal_indices(data_module,   split='train')  # 360 IDs
         few_shot_indices = {
-            "N25": random.sample(glaucoma_ids, 25, random_state=seed),
-            "N30": random.sample(glaucoma_ids, 30, random_state=seed),
-            "N35": random.sample(glaucoma_ids, 35, random_state=seed),
+            "N25": random.sample(glaucoma_ids, 25, random_state=seed)
+                  + random.sample(normal_ids,   25, random_state=seed+1),
+            "N30": random.sample(glaucoma_ids, 30, random_state=seed)
+                  + random.sample(normal_ids,   30, random_state=seed+1),
+            "N35": random.sample(glaucoma_ids, 35, random_state=seed)
+                  + random.sample(normal_ids,   35, random_state=seed+1),
         }
         # Entrenar backbone con cada subset y esta seed
 ```
@@ -149,10 +154,10 @@ El score de selección se calcula sobre las medias.
 # 5. Binarizar con percentil 95
 ```
 
-### Dim 2: Few-shot (support set de glaucoma)
-- F1-macro@N25 — 25 de las 40 imágenes de glaucoma en train (62.5%)
-- F1-macro@N30 — 30 de las 40 imágenes de glaucoma en train (75.0%)
-- F1-macro@N35 — 35 de las 40 imágenes de glaucoma en train (87.5%)
+### Dim 2: Few-shot (support set balanced)
+- F1-macro@N25 — 25 glaucoma + 25 normales de train (62.5% de los glaucoma disponibles)
+- F1-macro@N30 — 30 glaucoma + 30 normales de train (75.0% de los glaucoma disponibles)
+- F1-macro@N35 — 35 glaucoma + 35 normales de train (87.5% de los glaucoma disponibles)
 - Evaluación en val set **completo** (40 glaucoma + 360 normal)
 - Mismos subconjuntos para todos los backbones dentro de cada iteración
 

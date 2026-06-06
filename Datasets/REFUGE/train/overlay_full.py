@@ -6,8 +6,8 @@ import sys
 name = sys.argv[1] if len(sys.argv) > 1 else 'g0001'
 base = '/mnt/d/IRISCIENCE/Datasets/REFUGE/train'
 
-img = np.array(Image.open(f'{base}/Images/{name}.jpg'))
-mask = np.array(Image.open(f'{base}/Masks/{name}.png'))
+img = np.array(Image.open(f'{base}/Images_Cropped/{name}.jpg'))
+mask = np.array(Image.open(f'{base}/Masks_Cropped/{name}.png'))
 
 unique = np.unique(mask)
 if set(unique).issubset({0, 128, 255}):
