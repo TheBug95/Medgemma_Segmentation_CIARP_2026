@@ -1,44 +1,240 @@
 {
-  "_comment": "selection_summary.json - SE GENERA AUTOMÁTICAMENTE tras ejecutar el experimento",
-  "_strategy": "5 iteraciones por backbone. En la iteración i, TODOS los backbones usan seeds[i]. Resultados finales = mean ± std sobre las 5 iteraciones.",
-  "_support_set": "El support set es EXCLUSIVAMENTE de glaucoma. En REFUGE/train hay 40 glaucomas → N=25,30,35 (todos < 40).",
-  "_seeds": [42, 123, 456, 789, 1024],
-  "_n_samples": [25, 30, 35],
-  "_schema": {
-    "backbones": {
-      "<backbone_name>": {
-        "per_seed": {
-          "42": {
-            "f1_N25": "float (0-1) — F1-macro en val completo con 25 glaucoma de support",
-            "f1_N30": "float (0-1)",
-            "f1_N35": "float (0-1)",
-            "mean_iou_gradcam": "float (0-1) — modelo N35 evaluado en val"
-          },
-          "123": "... (mismo esquema que seed 42)",
-          "456": "...",
-          "789": "...",
-          "1024": "..."
+  "backbones": {
+    "resnet18": {
+      "per_seed": {
+        "42": {
+          "mean_iou_gradcam": 0.09183641046982671,
+          "f1_N25": 0.6277865436743941,
+          "f1_N30": 0.6263034175155204,
+          "f1_N35": 0.4812460267005722
         },
-        "aggregated": {
-          "f1_N25_mean": "float",  "f1_N25_std": "float",
-          "f1_N30_mean": "float",  "f1_N30_std": "float",
-          "f1_N35_mean": "float",  "f1_N35_std": "float",
-          "mean_iou_mean": "float", "mean_iou_std": "float"
+        "123": {
+          "mean_iou_gradcam": 0.13945874658377658,
+          "f1_N25": 0.6157323688969258,
+          "f1_N30": 0.5967181198720624,
+          "f1_N35": 0.6094173809265488
         },
-        "computational": {
-          "total_parameters": "int",
-          "vram_batch_1_mb": "float",
-          "vram_batch_16_mb": "float",
-          "inference_time_ms": "float"
+        "456": {
+          "mean_iou_gradcam": 0.018545656655043593,
+          "f1_N25": 0.6373333333333333,
+          "f1_N30": 0.6270238196151564,
+          "f1_N35": 0.543049543049543
         },
-        "score": "float (0-1) - calculado sobre medias agregadas"
-      }
+        "789": {
+          "mean_iou_gradcam": 0.08309616081678396,
+          "f1_N25": 0.314385521282073,
+          "f1_N30": 0.6248275862068966,
+          "f1_N35": 0.6753874096688179
+        },
+        "1024": {
+          "mean_iou_gradcam": 0.006520379132845518,
+          "f1_N25": 0.47089947089947093,
+          "f1_N30": 0.5789007092198583,
+          "f1_N35": 0.4949494949494949
+        }
+      },
+      "aggregated": {
+        "mean_iou_mean": 0.06789147073165527,
+        "mean_iou_std": 0.049250051702421846,
+        "f1_N25_mean": 0.5332274476172394,
+        "f1_N25_std": 0.1251903235294669,
+        "f1_N30_mean": 0.6107547304858988,
+        "f1_N30_std": 0.01957649256596647,
+        "f1_N35_mean": 0.5608099710589954,
+        "f1_N35_std": 0.07276554966567526
+      },
+      "computational": {
+        "total_parameters": 11177538,
+        "trainable_parameters": 8394754,
+        "vram_batch_1_mb": 90.02880859375,
+        "vram_batch_16_mb": 515.56591796875,
+        "inference_time_ms": 4.536275024414063
+      },
+      "score": 0.25446220832275035
     },
-    "winner": "<backbone_name>",
-    "seeds_used": [42, 123, 456, 789, 1024],
-    "n_samples": [25, 30, 35],
-    "config_used": "dict - config.yaml parsed",
-    "timestamp": "ISO 8601"
+    "efficientnet_b0": {
+      "per_seed": {
+        "42": {
+          "mean_iou_gradcam": 0.008045074118648134,
+          "f1_N25": 0.7528351264902589,
+          "f1_N30": 0.7107039537126326,
+          "f1_N35": 0.6748547750748429
+        },
+        "123": {
+          "mean_iou_gradcam": 0.0022639328365729834,
+          "f1_N25": 0.47229551451187335,
+          "f1_N30": 0.5348566777138206,
+          "f1_N35": 0.4950389794472005
+        },
+        "456": {
+          "mean_iou_gradcam": 0.012369323921538502,
+          "f1_N25": 0.48911655208021954,
+          "f1_N30": 0.48911655208021954,
+          "f1_N35": 0.5063759769642122
+        },
+        "789": {
+          "mean_iou_gradcam": 0.022950227187476524,
+          "f1_N25": 0.5706693892510275,
+          "f1_N30": 0.6543778801843317,
+          "f1_N35": 0.7252747252747253
+        },
+        "1024": {
+          "mean_iou_gradcam": 0.011878784369467326,
+          "f1_N25": 0.561757582747088,
+          "f1_N30": 0.5733333333333334,
+          "f1_N35": 0.5680789798436857
+        }
+      },
+      "aggregated": {
+        "mean_iou_mean": 0.011501468486740694,
+        "mean_iou_std": 0.0067712383362962736,
+        "f1_N25_mean": 0.5693348330160934,
+        "f1_N25_std": 0.09958228296153733,
+        "f1_N30_mean": 0.5924776794048675,
+        "f1_N30_std": 0.08022380601472519,
+        "f1_N35_mean": 0.5939246873209333,
+        "f1_N35_std": 0.09155727396130993
+      },
+      "computational": {
+        "total_parameters": 4010110,
+        "trainable_parameters": 414722,
+        "vram_batch_1_mb": 75.9248046875,
+        "vram_batch_16_mb": 707.5654296875,
+        "inference_time_ms": 11.446708984375
+      },
+      "score": 0.4386988806936155
+    },
+    "densenet121": {
+      "per_seed": {
+        "42": {
+          "mean_iou_gradcam": 0.05933702814590709,
+          "f1_N25": 0.5483274918977578,
+          "f1_N30": 0.5830890495733178,
+          "f1_N35": 0.5049182463683147
+        },
+        "123": {
+          "mean_iou_gradcam": 0.20570769025132074,
+          "f1_N25": 0.5148110316649642,
+          "f1_N30": 0.6410700977931895,
+          "f1_N35": 0.5497264326291263
+        },
+        "456": {
+          "mean_iou_gradcam": 0.04072152395690407,
+          "f1_N25": 0.4902482269503546,
+          "f1_N30": 0.42018981880931844,
+          "f1_N35": 0.6282182358955293
+        },
+        "789": {
+          "mean_iou_gradcam": 0.04312893704256247,
+          "f1_N25": 0.33455638188047,
+          "f1_N30": 0.6029165097730462,
+          "f1_N35": 0.365234375
+        },
+        "1024": {
+          "mean_iou_gradcam": 0.008714087851664904,
+          "f1_N25": 0.42279942279942284,
+          "f1_N30": 0.521659548505186,
+          "f1_N35": 0.5754076086956521
+        }
+      },
+      "aggregated": {
+        "mean_iou_mean": 0.07152185344967185,
+        "mean_iou_std": 0.06907089428148497,
+        "f1_N25_mean": 0.46214851103859383,
+        "f1_N25_std": 0.07591818494053465,
+        "f1_N30_mean": 0.5537850048908115,
+        "f1_N30_std": 0.07716351202719794,
+        "f1_N35_mean": 0.5247009797177246,
+        "f1_N35_std": 0.08914506425066966
+      },
+      "computational": {
+        "total_parameters": 6955906,
+        "trainable_parameters": 2160130,
+        "vram_batch_1_mb": 85.17578125,
+        "vram_batch_16_mb": 693.95703125,
+        "inference_time_ms": 15.126021728515624
+      },
+      "score": 0.30284439968887317
+    }
   },
-  "_formula": "Score = 0.40 * mean(f1_N25, f1_N30, f1_N35) + 0.40 * mean_iou + 0.20 * (1 - vram_norm)"
+  "winner": "efficientnet_b0",
+  "seeds_used": [
+    42,
+    123,
+    456,
+    789,
+    1024
+  ],
+  "n_samples": [
+    25,
+    30,
+    35
+  ],
+  "config_used": {
+    "seed": 42,
+    "data": {
+      "data_dir": "../../Datasets/REFUGE",
+      "output_dir": "./data",
+      "image_size": [
+        448,
+        448
+      ],
+      "batch_size": 16,
+      "num_workers": 2,
+      "cache_images": true
+    },
+    "backbones": [
+      "resnet18",
+      "efficientnet_b0",
+      "densenet121"
+    ],
+    "classifier": {
+      "num_classes": 2,
+      "pretrained": true,
+      "epochs": 30,
+      "lr": 0.0001,
+      "weight_decay": 1e-05,
+      "patience": 5,
+      "scheduler_factor": 0.5,
+      "scheduler_patience": 3
+    },
+    "few_shot": {
+      "n_samples": [
+        25,
+        30,
+        35
+      ],
+      "seeds": [
+        42,
+        123,
+        456,
+        789,
+        1024
+      ],
+      "support_mode": "balanced"
+    },
+    "augmentations": {
+      "horizontal_flip": true,
+      "rotation_degrees": 15,
+      "color_jitter_brightness": 0.1,
+      "color_jitter_contrast": 0.1,
+      "random_erasing": true,
+      "random_erasing_p": 0.2,
+      "mixup": false,
+      "mixup_alpha": 0.2
+    },
+    "gradcam": {
+      "target_layer": "last_conv",
+      "percentile": 95
+    },
+    "benchmark": {
+      "batch_sizes": [
+        1,
+        16
+      ],
+      "num_runs": 100
+    },
+    "results_dir": "./results"
+  },
+  "timestamp": "2026-06-08T02:33:36.240629Z"
 }
