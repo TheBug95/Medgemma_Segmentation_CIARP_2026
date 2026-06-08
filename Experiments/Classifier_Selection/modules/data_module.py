@@ -18,7 +18,8 @@
 #       "batch_size": 16,
 #       "num_workers": 2,
 #       "seed": 42,                           # opcional (default 42)
-#       "augmentations": {...}                # opcional (default = DEFAULT_AUGMENTATIONS)
+#       "augmentations": {...},               # opcional (default = DEFAULT_AUGMENTATIONS)
+#       "cache_images": false                 # opcional (default false): cachear en RAM
 #   }
 #
 # MÉTODOS PÚBLICOS:
@@ -46,6 +47,19 @@
 #   - mixup (config.augmentations.mixup) es a nivel de batch y mezcla labels: se maneja
 #     en el training loop de few_shot.py, NO aquí.
 #   - Requiere torch/torchvision (entorno Colab/GPU). PIL/numpy para E/S de imagen.
+#
+# NOTA — CACHÉ DE IMÁGENES (config.data.cache_images, default False):
+#   Por defecto el Dataset carga cada imagen del disco BAJO DEMANDA (lazy), lo
+#   estándar en PyTorch y seguro en memoria para datasets grandes. Con
+#   cache_images=True se guarda en RAM la imagen ya redimensionada + la máscara,
+#   evitando releer/redecodificar el disco en cada época. Útil para REFUGE (1200
+#   imgs, caben en RAM) y experimentos con mucha relectura (el val se evalúa cada
+#   época en decenas de entrenamientos -> caché = gran ahorro).
+#     - Las augmentations se siguen aplicando POR LLAMADA (no se cachea el tensor
+#       final de train), así que la variedad de augmentation se preserva.
+#     - Con cache_images=True se fuerza num_workers=0 para que la caché viva en un
+#       solo proceso y persista entre épocas (con varios workers cada uno tendría
+#       su propia copia y no persistiría de forma simple).
 # =============================================================================
 
 from __future__ import annotations
@@ -120,7 +134,9 @@ class RefugeDataset(Dataset):
     """
     Dataset de PyTorch sobre REFUGE para clasificación binaria (glaucoma vs normal).
 
-    Lee cada imagen y su máscara GT bajo demanda (no carga todo en memoria).
+    Por defecto carga cada imagen/máscara del disco bajo demanda (lazy). Con
+    cache_images=True guarda en RAM la imagen ya redimensionada y la máscara
+    binaria, y solo aplica las augmentations + normalización por llamada.
     """
 
     def __init__(
@@ -130,6 +146,7 @@ class RefugeDataset(Dataset):
         data_dir: Path,
         image_size: tuple[int, int],
         image_transform: T.Compose,
+        cache_images: bool = False,
     ) -> None:
         """
         Args:
@@ -137,16 +154,31 @@ class RefugeDataset(Dataset):
             image_ids: IDs que componen este dataset (subconjunto de un split).
             data_dir: Raíz del dataset REFUGE (absoluta).
             image_size: (alto, ancho) destino, p.ej. (448, 448).
-            image_transform: Transform de torchvision aplicado a la imagen RGB.
+            image_transform: Transform de torchvision aplicado a la imagen RGB YA
+                redimensionada (augmentation + ToTensor + Normalize, SIN Resize).
+            cache_images: Si True, cachea en RAM la imagen redimensionada + máscara.
         """
         self.annotations = annotations
         self.image_ids = list(image_ids)
         self.data_dir = data_dir
         self.image_size = image_size
         self.image_transform = image_transform
+        self.cache_images = cache_images
+
+        # El Resize se hace al CARGAR (no en image_transform) para poder cachear la
+        # imagen ya redimensionada y que las augmentations sigan corriendo por llamada.
+        self._resize = T.Resize(image_size, antialias=True)
+        self._image_cache: dict[str, Image.Image] = {}
+        self._mask_cache: dict[str, torch.Tensor] = {}
 
     def __len__(self) -> int:
         return len(self.image_ids)
+
+    def _load_image(self, record: dict) -> Image.Image:
+        """Abre la imagen RGB y la redimensiona a image_size (parte cacheable)."""
+        image_path = self.data_dir / record["split"] / "Images" / record["image_filename"]
+        image = Image.open(image_path).convert("RGB")
+        return self._resize(image)
 
     def _load_mask(self, mask_rel: str) -> torch.Tensor:
         """Carga la máscara 3-clase, la redimensiona (NEAREST) y la binariza a {0,1}."""
@@ -162,12 +194,20 @@ class RefugeDataset(Dataset):
         image_id = self.image_ids[idx]
         record = self.annotations[image_id]
 
-        # Ruta de imagen: <data_dir>/<split>/Images/<image_filename>.
-        image_path = self.data_dir / record["split"] / "Images" / record["image_filename"]
-        image = Image.open(image_path).convert("RGB")
-        image_tensor = self.image_transform(image)
+        # Imagen redimensionada + máscara: desde caché si está disponible.
+        if self.cache_images and image_id in self._image_cache:
+            image = self._image_cache[image_id]
+            mask_tensor = self._mask_cache[image_id]
+        else:
+            image = self._load_image(record)          # PIL ya redimensionada
+            mask_tensor = self._load_mask(record["mask_path"])
+            if self.cache_images:
+                self._image_cache[image_id] = image
+                self._mask_cache[image_id] = mask_tensor
 
-        mask_tensor = self._load_mask(record["mask_path"])
+        # Augmentations (si train) + ToTensor + Normalize. Se aplica SIEMPRE por
+        # llamada, así la augmentation varía aunque la imagen venga de caché.
+        image_tensor = self.image_transform(image)
 
         label_name = record.get("label", "unknown")
         label = CLASS_TO_IDX.get(label_name, UNLABELED_IDX)
@@ -192,8 +232,9 @@ class DataModule:
     def __init__(self, config: dict) -> None:
         """
         Args:
-            config: Sección `data` de config.yaml. Puede incluir `seed` y
-                `augmentations`; si faltan, se usan 42 y DEFAULT_AUGMENTATIONS.
+            config: Sección `data` de config.yaml. Puede incluir `seed`,
+                `augmentations` y `cache_images`; si faltan, se usan 42,
+                DEFAULT_AUGMENTATIONS y False respectivamente.
         """
         self.seed: int = config.get("seed", 42)
         set_global_seed(self.seed)
@@ -203,6 +244,7 @@ class DataModule:
         self.image_size: tuple[int, int] = tuple(config.get("image_size", [448, 448]))
         self.batch_size: int = config.get("batch_size", 16)
         self.num_workers: int = config.get("num_workers", 2)
+        self.cache_images: bool = config.get("cache_images", False)
         self.augmentations: dict = {**DEFAULT_AUGMENTATIONS, **config.get("augmentations", {})}
 
         self.annotations: dict[str, dict] = self._load_json(self.output_dir / "annotations.json")
@@ -212,9 +254,10 @@ class DataModule:
         self._eval_transform = self._build_eval_transform()
 
         logger.info(
-            "DataModule listo | data_dir=%s | splits=%s",
+            "DataModule listo | data_dir=%s | splits=%s | cache_images=%s",
             self.data_dir,
             {k: len(v) for k, v in self.splits.items()},
+            self.cache_images,
         )
 
     # ---- Carga de archivos ---------------------------------------------------
@@ -230,21 +273,23 @@ class DataModule:
             return json.load(f)
 
     # ---- Transformaciones ----------------------------------------------------
+    # NOTA: el Resize NO va aquí; lo hace RefugeDataset al cargar (para poder
+    # cachear la imagen ya redimensionada). Estos transforms reciben una imagen
+    # PIL que YA está en image_size.
 
     def _build_eval_transform(self) -> T.Compose:
-        """Transform de evaluación: resize + normalización (sin augmentation)."""
+        """Transform de evaluación: ToTensor + normalización (sin augmentation)."""
         return T.Compose(
             [
-                T.Resize(self.image_size, antialias=True),
                 T.ToTensor(),
                 T.Normalize(IMAGENET_MEAN, IMAGENET_STD),
             ]
         )
 
     def _build_train_transform(self) -> T.Compose:
-        """Transform de entrenamiento: resize + augmentations + normalización."""
+        """Transform de entrenamiento: augmentations + ToTensor + normalización."""
         aug = self.augmentations
-        steps: list = [T.Resize(self.image_size, antialias=True)]
+        steps: list = []
 
         if aug.get("horizontal_flip"):
             steps.append(T.RandomHorizontalFlip(p=0.5))
@@ -279,7 +324,7 @@ class DataModule:
         Construye un DataLoader a partir de una lista explícita de image_ids.
 
         Es el método reutilizable que usan get_*_loader() y el few-shot (donde
-        image_ids es el support set de glaucoma muestreado con una seed dada).
+        image_ids es el support set muestreado con una seed dada).
 
         Args:
             image_ids: IDs a incluir en el loader.
@@ -290,7 +335,12 @@ class DataModule:
         """
         transform = self._train_transform if augment else self._eval_transform
         dataset = RefugeDataset(
-            self.annotations, image_ids, self.data_dir, self.image_size, transform
+            self.annotations,
+            image_ids,
+            self.data_dir,
+            self.image_size,
+            transform,
+            cache_images=self.cache_images,
         )
 
         generator = None
@@ -298,11 +348,15 @@ class DataModule:
             generator = torch.Generator()
             generator.manual_seed(self.seed if seed is None else seed)
 
+        # Con caché se fuerza num_workers=0: la caché vive en el proceso principal
+        # y persiste entre épocas (con workers cada uno tendría su propia copia).
+        num_workers = 0 if self.cache_images else self.num_workers
+
         return DataLoader(
             dataset,
             batch_size=batch_size or self.batch_size,
             shuffle=shuffle,
-            num_workers=self.num_workers,
+            num_workers=num_workers,
             generator=generator,
             worker_init_fn=_seed_worker,
             pin_memory=torch.cuda.is_available(),
@@ -338,7 +392,12 @@ class DataModule:
         """Devuelve la muestra `index` de `split` (transform de eval, para debug)."""
         image_ids = self.splits[split]
         dataset = RefugeDataset(
-            self.annotations, image_ids, self.data_dir, self.image_size, self._eval_transform
+            self.annotations,
+            image_ids,
+            self.data_dir,
+            self.image_size,
+            self._eval_transform,
+            cache_images=False,
         )
         return dataset[index]
 

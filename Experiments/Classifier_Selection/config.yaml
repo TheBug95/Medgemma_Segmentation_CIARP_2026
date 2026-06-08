@@ -18,6 +18,11 @@ data:
   image_size: [448, 448]
   batch_size: 16
   num_workers: 2
+  # Cachear imágenes en RAM (decodificadas + redimensionadas) para acelerar:
+  # REFUGE cabe en memoria y el val se relee muchísimo entre épocas/modelos.
+  # Activarlo fuerza num_workers=0 (ver nota en modules/data_module.py).
+  # Poner false para datasets grandes que no quepan en memoria.
+  cache_images: true
 
 # Backbones a evaluar
 backbones:
