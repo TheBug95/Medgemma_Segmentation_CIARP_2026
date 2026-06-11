@@ -1,31 +1,22 @@
-<<<<<<< HEAD
-# Datos derivados (se regeneran con scripts/convert_refuge_format.py)
-Experiments/Classifier_Selection/data/
-
-# Zips de datos para Colab (NO versionar; se distribuyen por Google Drive)
-REFUGE_data.zip
-*.zip
-
-# Cache de Python
-__pycache__/
-*.pyc
-*.pyo
-
-# Checkpoints temporales del smoke test
-Experiments/Classifier_Selection/results/_smoke/
-=======
 # =============================================================================
 # .gitignore
 # =============================================================================
 # Reglas para que git NO rastree archivos que no deben versionarse.
 # Documentacion del proyecto en AGENTS.md (seccion "Que NO Hacer" punto 6).
+#
+# NOTA: este archivo tenia marcadores de conflicto de merge sin resolver
+# (commit 0c2a829). Se fusionaron ambos lados (HEAD + master) conservando
+# todas las reglas de los dos.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Datasets privados (no deben subirse al repositorio)
+# Datasets privados (imagenes/mascaras/anotaciones NO se versionan; van por Drive)
 # -----------------------------------------------------------------------------
 Datasets/
 **/Datasets/
+
+# Datos derivados (se regeneran con scripts/convert_refuge_format.py)
+Experiments/Classifier_Selection/data/
 
 # -----------------------------------------------------------------------------
 # Artefactos de Python
@@ -44,7 +35,7 @@ __pycache__/
 **/.ipynb_checkpoints/
 
 # -----------------------------------------------------------------------------
-# Modelos entrenados y pesos (archivos grandes)
+# Modelos entrenados y pesos (archivos grandes; se distribuyen por Google Drive)
 # -----------------------------------------------------------------------------
 *.pth
 *.pt
@@ -54,7 +45,7 @@ __pycache__/
 *.ckpt
 
 # -----------------------------------------------------------------------------
-# Outputs generados por experimentos
+# Outputs generados por experimentos y por el Classifier
 # -----------------------------------------------------------------------------
 output/
 **/output/
@@ -63,6 +54,17 @@ logs/
 visualizations/
 **/visualizations/
 *.log
+Classifier/results/
+Classifier/checkpoints/
+
+# Checkpoints temporales del smoke test
+Experiments/Classifier_Selection/results/_smoke/
+
+# -----------------------------------------------------------------------------
+# Zips de datos para Colab (NO versionar; se distribuyen por Google Drive)
+# -----------------------------------------------------------------------------
+REFUGE_data.zip
+*.zip
 
 # -----------------------------------------------------------------------------
 # Entornos virtuales
@@ -87,4 +89,3 @@ ENV/
 .DS_Store
 Thumbs.db
 desktop.ini
->>>>>>> aa4e303f9caaa1d14a2a25a4683293c29a55266f

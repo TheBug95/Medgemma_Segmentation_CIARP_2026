@@ -1,0 +1,116 @@
+# =============================================================================
+# Classifier/config.yaml
+# =============================================================================
+# Configuracion centralizada del clasificador EfficientNet-B0 (regla AGENTS.md:
+# NADA se hardcodea en el codigo, todo vive aqui).
+#
+# Protocolo de entrenamiento: 5 repeticiones (5-fold). En la repeticion i se usa
+# split_files[i-1] con seeds[i-1]. Rep 1 -> split_repetition_1.json + seed 42, etc.
+# =============================================================================
+
+# Semilla global "por defecto" (cada repeticion usa su propia seed de `training.seeds`).
+seed: 42
+
+# -----------------------------------------------------------------------------
+# Modelo
+# -----------------------------------------------------------------------------
+model:
+  num_classes: 2          # glaucoma, normal
+  pretrained: true        # pesos ImageNet
+  dropout: 0.5
+  class_names: [normal, glaucoma]   # orden por indice: normal=0, glaucoma=1
+
+# -----------------------------------------------------------------------------
+# Preprocesamiento (fijo del modelo; lo comparten training e inferencia)
+# -----------------------------------------------------------------------------
+preprocessing:
+  image_size: [448, 448]  # alto, ancho
+
+# -----------------------------------------------------------------------------
+# Datos
+# -----------------------------------------------------------------------------
+data:
+  # Raiz donde viven las imagenes/mascaras/anotaciones. Las rutas de los splits
+  # son relativas a esta carpeta (ej. data_root/"1209/1209_left.jpg").
+  # En Colab: apuntar al Google Drive montado (las imagenes NO se versionan).
+  # Localmente es solo un placeholder (no hay imagenes en el repo).
+  data_root: "/content/drive/MyDrive/CIARP"
+
+  # Carpeta (relativa a Classifier/) con los 5 archivos de split. Estos SI se
+  # versionan en el repo (son pequenos: solo listas de rutas, sin diagnostico).
+  splits_dir: "./splits"
+  split_files:
+    - split_repetition_1.json
+    - split_repetition_2.json
+    - split_repetition_3.json
+    - split_repetition_4.json
+    - split_repetition_5.json
+
+  # De donde sale la etiqueta glaucoma/normal: del .json de anotacion de cada
+  # imagen (campo `label`). Mapeo Pathological->glaucoma, Normal->normal.
+  label_field: label
+  label_map:
+    Pathological: glaucoma
+    Normal: normal
+
+# -----------------------------------------------------------------------------
+# Entrenamiento few-shot
+# -----------------------------------------------------------------------------
+training:
+  epochs: 30
+  lr: 0.0001
+  weight_decay: 0.00001
+  patience: 5             # early stopping (epocas sin mejora en val_loss)
+  scheduler_factor: 0.5
+  scheduler_patience: 3
+  batch_size: 16
+
+  # Una seed por repeticion (rep i usa seeds[i-1] y split_files[i-1]).
+  seeds: [42, 123, 456, 789, 1024]
+
+  # Seccion del split usada para entrenar. El usuario provee 'train_fewshot' ya
+  # balanceado (15 glaucoma + 15 normal = 30). ('train' es el conjunto grande,
+  # no se usa para el few-shot del clasificador.)
+  train_section: train_fewshot
+
+  # Submuestreo OPCIONAL del conjunto de entrenamiento. size: null = usar todo
+  # (recomendado: train_fewshot ya viene listo y balanceado). Si se pone un
+  # entero N, se submuestrea con 'mode': balanced (N/2 por clase) | stratified | random.
+  train_subsample:
+    size: null
+    mode: balanced
+
+# -----------------------------------------------------------------------------
+# Augmentations (solo en train)
+# -----------------------------------------------------------------------------
+augmentations:
+  horizontal_flip: true
+  rotation_degrees: 15
+  color_jitter_brightness: 0.1
+  color_jitter_contrast: 0.1
+  random_erasing: true
+  random_erasing_p: 0.2
+
+# -----------------------------------------------------------------------------
+# Grad-CAM (lo extrae modules/gradcam_module.py de la raiz del repo)
+# -----------------------------------------------------------------------------
+gradcam:
+  target_layer: "features[-1]"  # ultimo bloque conv de EfficientNet-B0
+  percentile: 95                # para binarizar (lo usa el Pipeline B; aqui informativo)
+  use_external: true            # intenta pytorch-grad-cam; si falla cae a hooks manuales
+  colormap: jet                 # colormap del overlay
+  overlay_alpha: 0.4            # transparencia del heatmap sobre la foto
+
+# -----------------------------------------------------------------------------
+# Inferencia
+# -----------------------------------------------------------------------------
+inference:
+  # Si true, el Grad-CAM solo se genera cuando la prediccion es glaucoma.
+  gradcam_on_glaucoma_only: true
+
+# -----------------------------------------------------------------------------
+# Rutas de salida (relativas a Classifier/; gitignored)
+# -----------------------------------------------------------------------------
+paths:
+  checkpoints_dir: "./checkpoints"  # fs_weights_split_<i>.pth
+  results_dir: "./results"          # split_<i>/predictions.json + gradcam/
