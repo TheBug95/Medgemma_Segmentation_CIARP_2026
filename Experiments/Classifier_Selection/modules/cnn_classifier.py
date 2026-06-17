@@ -8,7 +8,8 @@
 #   Se implementa UNA sola clase pública `CNNClassifier` (no una por backbone),
 #   porque así la instancian el notebook y few_shot.py:
 #       CNNClassifier({"backbone": "resnet18", "num_classes": 2, ...})
-#   El backbone concreto se construye internamente según config["backbone"].
+#   El backbone concreto lo construye `modules/backbones.build_raw_backbone`
+#   (factory compartida con el few-shot por prototipos), según config["backbone"].
 #   Todos los backbones provienen de torchvision (no timm): torchvision tiene los
 #   tres y las capas objetivo de Grad-CAM documentadas (layer4, features) asumen
 #   la estructura de torchvision; además evita una dependencia extra.
@@ -52,18 +53,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torchvision.models as tvm
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
+
+from modules.backbones import SUPPORTED_BACKBONES, build_raw_backbone
 
 logger = logging.getLogger(__name__)
 
 # Nombres de clase por índice. DEBE casar con CLASS_TO_IDX de data_module.py
 # (normal=0, glaucoma=1). Se define local para mantener M2 independiente de M1.
 DEFAULT_CLASS_NAMES = ["normal", "glaucoma"]
-
-# Backbones soportados (todos de torchvision).
-SUPPORTED_BACKBONES = ("resnet18", "efficientnet_b0", "densenet121")
 
 
 def set_global_seed(seed: int) -> None:
@@ -110,8 +109,9 @@ class CNNClassifier:
         set_global_seed(self.seed)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # self.target_layer es el módulo conv final usado por Grad-CAM.
-        self.model, self.target_layer = self._build_model()
+        # self.target_layer es el módulo conv final usado por Grad-CAM;
+        # self.target_layer_path es su ruta string (para el módulo compartido).
+        self.model, self.target_layer, self.target_layer_path = self._build_model()
         self.model.to(self.device)
 
         n_trainable = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
@@ -134,42 +134,20 @@ class CNNClassifier:
             nn.Linear(in_features, self.num_classes),
         )
 
-    def _build_model(self) -> tuple[nn.Module, nn.Module]:
+    def _build_model(self) -> tuple[nn.Module, nn.Module, str]:
         """
-        Construye el backbone, reemplaza la cabeza y aplica la freeze strategy.
+        Construye el backbone (via build_raw_backbone), reemplaza la cabeza por
+        una entrenable (Dropout + Linear) y aplica la freeze strategy.
 
         Returns:
-            (model, target_layer) donde target_layer es la última capa conv
-            (para Grad-CAM).
+            (model, target_layer, target_path) — target_layer es la última capa
+            conv (para Grad-CAM) y target_path su ruta string.
         """
-        weights = "DEFAULT" if self.pretrained else None
-
-        if self.backbone_name == "resnet18":
-            model = tvm.resnet18(weights=weights)
-            in_features = model.fc.in_features  # 512
-            head = self._make_head(in_features)
-            model.fc = head
-            target_layer = model.layer4
-            last_block = model.layer4
-
-        elif self.backbone_name == "densenet121":
-            model = tvm.densenet121(weights=weights)
-            in_features = model.classifier.in_features  # 1024
-            head = self._make_head(in_features)
-            model.classifier = head
-            target_layer = model.features
-            last_block = model.features.denseblock4
-
-        else:  # efficientnet_b0
-            model = tvm.efficientnet_b0(weights=weights)
-            in_features = model.classifier[1].in_features  # 1280
-            head = self._make_head(in_features)
-            model.classifier = head
-            target_layer = model.features
-            last_block = model.features[-1]
-
-        self._apply_freeze(model, last_block, head)
-        return model, target_layer
+        parts = build_raw_backbone(self.backbone_name, pretrained=self.pretrained)
+        head = self._make_head(parts.feat_dim)
+        setattr(parts.model, parts.head_attr, head)
+        self._apply_freeze(parts.model, parts.last_block, head)
+        return parts.model, parts.target_layer, parts.target_path
 
     @staticmethod
     def _apply_freeze(model: nn.Module, last_block: nn.Module, head: nn.Module) -> None:

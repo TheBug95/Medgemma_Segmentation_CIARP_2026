@@ -311,6 +311,22 @@ class DataModule:
 
     # ---- Construcción de loaders ---------------------------------------------
 
+    def build_dataset(self, image_ids: list[str], *, augment: bool) -> RefugeDataset:
+        """
+        Crea un RefugeDataset sobre image_ids (transform de train si augment, si no
+        de eval). Lo usa build_loader y tambien el meta-training (el TaskSampler de
+        EasyFSL necesita un Dataset, no un DataLoader).
+        """
+        transform = self._train_transform if augment else self._eval_transform
+        return RefugeDataset(
+            self.annotations,
+            image_ids,
+            self.data_dir,
+            self.image_size,
+            transform,
+            cache_images=self.cache_images,
+        )
+
     def build_loader(
         self,
         image_ids: list[str],
@@ -333,15 +349,7 @@ class DataModule:
             batch_size: Tamaño de batch; por defecto el de config.
             seed: Semilla para el shuffle reproducible; por defecto self.seed.
         """
-        transform = self._train_transform if augment else self._eval_transform
-        dataset = RefugeDataset(
-            self.annotations,
-            image_ids,
-            self.data_dir,
-            self.image_size,
-            transform,
-            cache_images=self.cache_images,
-        )
+        dataset = self.build_dataset(image_ids, augment=augment)
 
         generator = None
         if shuffle:

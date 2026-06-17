@@ -30,11 +30,11 @@ backbones:
   - efficientnet_b0
   - densenet121
 
-# Clasificador - configuración de training few-shot
+# Clasificador - hiperparámetros del fine-tune (solo aplican a few_shot.method: finetune)
 classifier:
   num_classes: 2  # glaucoma, normal
   pretrained: true
-  # Training few-shot
+  # Training few-shot (solo finetune)
   epochs: 30
   lr: 0.0001
   weight_decay: 0.00001
@@ -44,22 +44,31 @@ classifier:
 
 # Few-shot experiment - mismo sampling para todos los backbones
 few_shot:
-  # Tamaños del support set a evaluar.
-  # El support set es BALANCED: N glaucoma + N normales.
-  # En REFUGE/train hay 40 glaucoma → N=25, 30, 35 (todos < 40).
-  n_samples: [25, 30, 35]
+  # Métodos que corre el experimento (el orquestador itera sobre estos → 6 configs
+  # = 3 backbones × 2 métodos). "euclidean" = prototipos congelados; "meta" =
+  # prototipos con meta-training episódico del backbone. ("finetune" = baseline.)
+  methods: [euclidean, meta]
+  # Método por defecto si se llama train_few_shot sin especificar (fallback).
+  method: euclidean
+  # Tamaños del support set a evaluar (cada uno BALANCED: N glaucoma + N normal).
+  # En el modo "meta", N = n_shot del meta-training. N en {1, 2, 3, 4, 5}.
+  n_samples: [1, 2, 3, 4, 5]
   # Lista de seeds para las 5 iteraciones del experimento.
-  # REGLA: en la iteración i, TODOS los backbones usan seeds[i].
-  # Esto garantiza que cada backbone entrena con exactamente las mismas
-  # imágenes y condiciones iniciales en cada iteración, haciendo la
-  # comparación entre backbones justa y estadísticamente válida.
-  # Los resultados finales se reportan como mean ± std sobre las 5 iteraciones.
+  # REGLA: en la iteración i, TODOS los backbones usan seeds[i] → mismas imágenes
+  # y condiciones, comparación justa. Resultados finales = mean ± std sobre las 5.
   seeds: [42, 123, 456, 789, 1024]
-  # Composición del support set. "balanced" = N glaucoma + N normales
-  # (clínica y matemáticamente la única composición entrenable con
-  # CrossEntropy: glaucoma_only colapsa el clasificador a predecir la
-  # única clase vista). Ver SPEC §6.
+  # Composición del support set. "balanced" = N glaucoma + N normal (lo correcto
+  # para 2 prototipos: se necesitan ambas clases). Ver SPEC §6.
   support_mode: balanced
+
+# Meta-training episódico (solo para few_shot.method: meta)
+meta_training:
+  n_way: 2          # glaucoma vs normal (las 2 únicas clases)
+  n_query: 10       # imágenes de query por clase en cada episodio
+  n_episodes: 100   # número de tareas/episodios de entrenamiento
+  lr: 0.001         # Adam (como el ejemplo de EasyFSL)
+  augment: true     # augmentation en los episodios de meta-training
+  # n_shot NO va aquí: es el N del barrido (few_shot.n_samples).
 
 # Augmentations (solo train)
 augmentations:
