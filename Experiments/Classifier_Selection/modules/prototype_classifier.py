@@ -46,13 +46,13 @@
 from __future__ import annotations
 
 import logging
+import random
 from pathlib import Path
 
 import numpy as np
 import torch
 import torch.nn.functional as F
 from easyfsl.methods import PrototypicalNetworks
-from torch.utils.data import Dataset
 
 from modules.backbones import build_backbone
 from modules.data_module import CLASS_TO_IDX, set_global_seed
@@ -62,29 +62,6 @@ logger = logging.getLogger(__name__)
 # Nombres de clase por indice. DEBE casar con CLASS_TO_IDX de data_module.py
 # (normal=0, glaucoma=1).
 DEFAULT_CLASS_NAMES = ["normal", "glaucoma"]
-
-
-class _EpisodicDataset(Dataset):
-    """
-    Adaptador FewShotDataset para el TaskSampler de EasyFSL sobre un RefugeDataset.
-
-    TaskSampler exige __getitem__ -> (image, label) y get_labels() con la etiqueta
-    de cada item (en orden). RefugeDataset devuelve dicts, asi que lo envolvemos.
-    """
-
-    def __init__(self, base_dataset, labels: list[int]) -> None:
-        self._base = base_dataset
-        self._labels = list(labels)
-
-    def __len__(self) -> int:
-        return len(self._base)
-
-    def __getitem__(self, idx: int):
-        sample = self._base[idx]
-        return sample["image"], int(sample["label"])
-
-    def get_labels(self) -> list[int]:
-        return list(self._labels)
 
 
 class PrototypeClassifier:
@@ -209,21 +186,19 @@ class PrototypeClassifier:
         augment: bool = True,
     ) -> dict:
         """
-        Meta-entrena (episodic training) el backbone con el TaskSampler de EasyFSL.
+        Meta-entrena (episodic training) el backbone con muestreo episodico propio.
 
-        Muestrea n_episodes tareas n_way/n_shot/n_query del split train; por cada
-        una arma prototipos del support y minimiza CrossEntropy sobre el query ->
-        backprop al backbone. Al terminar deja el modelo en eval(); los prototipos
-        de despliegue los fija despues fit() con el support k-shot.
+        Por cada episodio muestrea n_way clases y, por clase, n_shot soporte +
+        n_query query del split train; arma prototipos del support y minimiza
+        CrossEntropy sobre el query -> backprop al backbone. Al terminar deja el
+        modelo en eval(); los prototipos de despliegue los fija despues fit().
 
-        Requiere haber construido con freeze_backbone=False (backbone entrenable).
+        Se muestrea a mano (sin el TaskSampler de EasyFSL, que es incompatible con
+        algunas versiones de torch.utils.data.Sampler). Requiere freeze_backbone=False.
 
         Returns:
             {"n_episodes": int, "mean_loss": float}.
         """
-        from easyfsl.samplers import TaskSampler
-        from torch.utils.data import DataLoader
-
         if self.freeze_backbone:
             logger.warning(
                 "meta_train con freeze_backbone=True: el backbone esta congelado y "
@@ -232,47 +207,61 @@ class PrototypeClassifier:
 
         train_ids = data_module.splits["train"]
         base = data_module.build_dataset(train_ids, augment=augment)
-        labels = [CLASS_TO_IDX[data_module.annotations[i]["label"]] for i in train_ids]
-        dataset = _EpisodicDataset(base, labels)
+        # Indices del dataset agrupados por clase (label entero).
+        items_per_label: dict[int, list[int]] = {}
+        for idx, image_id in enumerate(train_ids):
+            lbl = CLASS_TO_IDX[data_module.annotations[image_id]["label"]]
+            items_per_label.setdefault(lbl, []).append(idx)
 
-        sampler = TaskSampler(
-            dataset, n_way=n_way, n_shot=n_shot, n_query=n_query, n_tasks=n_episodes
-        )
-        loader = DataLoader(
-            dataset,
-            batch_sampler=sampler,
-            collate_fn=sampler.episodic_collate_fn,
-            num_workers=0,
-            pin_memory=torch.cuda.is_available(),
-        )
+        classes = sorted(items_per_label)
+        if len(classes) < n_way:
+            raise ValueError(f"n_way={n_way} pero solo hay {len(classes)} clases en train.")
 
+        rng = random.Random(self.seed)
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
         self.model.train()
-        total_loss, n_batches = 0.0, 0
-        for support_images, support_labels, query_images, query_labels, _ in loader:
+        total_loss = 0.0
+
+        for _ in range(n_episodes):
+            # Muestrear n_way clases y, por cada una, n_shot soporte + n_query query.
+            episode_classes = rng.sample(classes, n_way)
+            s_imgs, s_lbls, q_imgs, q_lbls = [], [], [], []
+            for new_label, c in enumerate(episode_classes):
+                picks = rng.sample(items_per_label[c], n_shot + n_query)
+                for j, idx in enumerate(picks):
+                    img = base[idx]["image"]
+                    if j < n_shot:
+                        s_imgs.append(img)
+                        s_lbls.append(new_label)
+                    else:
+                        q_imgs.append(img)
+                        q_lbls.append(new_label)
+
+            support_images = torch.stack(s_imgs).to(self.device)
+            support_labels = torch.tensor(s_lbls, dtype=torch.long).to(self.device)
+            query_images = torch.stack(q_imgs).to(self.device)
+            query_labels = torch.tensor(q_lbls, dtype=torch.long).to(self.device)
+
             optimizer.zero_grad()
-            self.model.process_support_set(
-                support_images.to(self.device), support_labels.to(self.device)
-            )
-            scores = self.model(query_images.to(self.device))
-            loss = F.cross_entropy(scores, query_labels.to(self.device))
+            self.model.process_support_set(support_images, support_labels)
+            scores = self.model(query_images)
+            loss = F.cross_entropy(scores, query_labels)
             loss.backward()
             optimizer.step()
             total_loss += float(loss.item())
-            n_batches += 1
 
         self.model.eval()
-        mean_loss = total_loss / max(n_batches, 1)
+        mean_loss = total_loss / max(n_episodes, 1)
         logger.info(
             "[%s] meta_train listo | %d episodios | n_way=%d n_shot=%d n_query=%d | loss_media=%.4f",
             self.backbone_name,
-            n_batches,
+            n_episodes,
             n_way,
             n_shot,
             n_query,
             mean_loss,
         )
-        return {"n_episodes": n_batches, "mean_loss": mean_loss}
+        return {"n_episodes": n_episodes, "mean_loss": mean_loss}
 
     # ---- Inferencia ----------------------------------------------------------
 
