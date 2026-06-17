@@ -291,16 +291,19 @@ class PrototypeClassifier:
             "predicted_index": predicted_index,
         }
 
-    def get_gradcam(self, image: torch.Tensor) -> np.ndarray:
+    def get_gradcam(self, image: torch.Tensor, target_class: int | None = None) -> np.ndarray:
         """
-        Grad-CAM (heatmap continuo) del score del prototipo de la clase predicha.
+        Grad-CAM (heatmap continuo) del score del prototipo de la clase objetivo.
 
         El backbone esta congelado, asi que se fuerza el gradiente por la imagen
-        (batch.requires_grad_(True)). Devuelve un mapa (H, W) en [0, 1] SIN
-        binarizar (la binarizacion + IoU vs GT las hace el evaluador de Grad-CAM).
+        (batch.requires_grad_(True)). Usa forward-hook + tensor.register_hook (no
+        register_full_backward_hook), patron seguro con los 3 backbones (densenet
+        aplica relu in-place sobre la salida de `features`). Devuelve (H, W) en
+        [0, 1] SIN binarizar.
 
         Args:
             image: Tensor (3, H, W) o (1, 3, H, W) normalizado.
+            target_class: clase contra la cual derivar el Grad-CAM; None = la predicha.
         """
         self._check_fitted()
         self.model.eval()
@@ -320,7 +323,7 @@ class PrototypeClassifier:
         handle = self.target_layer.register_forward_hook(forward_hook)
         try:
             scores = self.model(batch)  # (1, C)
-            class_idx = int(scores.argmax(dim=1).item())
+            class_idx = target_class if target_class is not None else int(scores.argmax(dim=1).item())
             self.model.zero_grad()
             scores[0, class_idx].backward()
 

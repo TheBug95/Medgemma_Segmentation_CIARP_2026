@@ -320,12 +320,13 @@ class CNNClassifier:
             "predicted_index": predicted_index,
         }
 
-    def get_gradcam(self, image: torch.Tensor) -> np.ndarray:
+    def get_gradcam(self, image: torch.Tensor, target_class: int | None = None) -> np.ndarray:
         """
-        Genera el Grad-CAM (heatmap continuo) de la clase predicha.
+        Genera el Grad-CAM (heatmap continuo) de la clase objetivo.
 
         Args:
             image: Tensor (3, H, W) o (1, 3, H, W) normalizado.
+            target_class: clase contra la cual derivar el Grad-CAM; None = la predicha.
 
         Returns:
             ndarray (H, W) en [0, 1]. NO binarizado (eso lo hace el evaluador).
@@ -353,7 +354,7 @@ class CNNClassifier:
         handle = self.target_layer.register_forward_hook(forward_hook)
         try:
             logits = self.model(batch)
-            class_idx = int(logits.argmax(dim=1).item())
+            class_idx = target_class if target_class is not None else int(logits.argmax(dim=1).item())
             self.model.zero_grad()
             logits[0, class_idx].backward()
 
