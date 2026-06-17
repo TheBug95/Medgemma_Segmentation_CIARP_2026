@@ -49,9 +49,12 @@
 
 from __future__ import annotations
 
+import gc
 import logging
 import random
 from pathlib import Path
+
+import torch
 
 from modules.cnn_classifier import set_global_seed
 from scripts.evaluate import evaluate_classification
@@ -289,5 +292,12 @@ def train_few_shot(
             metrics["f1_macro"],
             metrics["accuracy"],
         )
+
+        # Liberar memoria del clasificador antes del siguiente N (evita que la GPU
+        # acumule modelos entre N y entre configs y termine en OutOfMemory).
+        del classifier
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     return results
