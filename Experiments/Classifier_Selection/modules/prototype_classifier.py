@@ -142,6 +142,9 @@ class PrototypeClassifier:
         if not images:
             raise ValueError("El support_loader esta vacio: no hay con que crear prototipos.")
 
+        for image in images:
+            print
+
         support_images = torch.cat(images, dim=0).to(self.device)
         support_labels = torch.cat(labels, dim=0).to(self.device)
 
@@ -156,7 +159,7 @@ class PrototypeClassifier:
 
         self.model.eval()
         with torch.no_grad():
-            self.model.process_support_set(support_images, support_labels)
+            self.model.process_support_set(support_images, support_labels) # Calcular los prototipos
 
         proto_shape = tuple(self.model.prototypes.shape)
         logger.info(

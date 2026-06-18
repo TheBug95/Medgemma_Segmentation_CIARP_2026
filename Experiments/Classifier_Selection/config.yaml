@@ -14,8 +14,8 @@ data:
   data_dir: "../../Datasets/REFUGE"
   # Ruta donde se guardará annotations.json y splits.json
   output_dir: "./data"
-  # Tamaño de imagen para CNN (448x448)
-  image_size: [448, 448]
+  # Tamaño de imagen para CNN (224x224)
+  image_size: [224, 224]
   batch_size: 16
   num_workers: 2
   # Cachear imágenes en RAM (decodificadas + redimensionadas) para acelerar:

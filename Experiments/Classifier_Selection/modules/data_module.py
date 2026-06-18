@@ -14,7 +14,7 @@
 #   {
 #       "data_dir": "../../Datasets/REFUGE",  # raíz del dataset (rel. al dir del experimento)
 #       "output_dir": "./data",               # donde viven annotations.json y splits.json
-#       "image_size": [448, 448],
+#       "image_size": [224, 224],
 #       "batch_size": 16,
 #       "num_workers": 2,
 #       "seed": 42,                           # opcional (default 42)
@@ -153,7 +153,7 @@ class RefugeDataset(Dataset):
             annotations: dict global {image_id: record} de annotations.json.
             image_ids: IDs que componen este dataset (subconjunto de un split).
             data_dir: Raíz del dataset REFUGE (absoluta).
-            image_size: (alto, ancho) destino, p.ej. (448, 448).
+            image_size: (alto, ancho) destino, p.ej. (224, 224).
             image_transform: Transform de torchvision aplicado a la imagen RGB YA
                 redimensionada (augmentation + ToTensor + Normalize, SIN Resize).
             cache_images: Si True, cachea en RAM la imagen redimensionada + máscara.
@@ -241,7 +241,7 @@ class DataModule:
 
         self.data_dir: Path = _resolve_dir(config["data_dir"])
         self.output_dir: Path = _resolve_dir(config["output_dir"])
-        self.image_size: tuple[int, int] = tuple(config.get("image_size", [448, 448]))
+        self.image_size: tuple[int, int] = tuple(config.get("image_size", [224, 224]))
         self.batch_size: int = config.get("batch_size", 16)
         self.num_workers: int = config.get("num_workers", 2)
         self.cache_images: bool = config.get("cache_images", False)

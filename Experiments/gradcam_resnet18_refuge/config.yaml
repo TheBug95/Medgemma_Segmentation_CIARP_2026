@@ -17,7 +17,7 @@ data:
   val_split: "val"
   test_split: "test"
   # Tamaño de imagen para CNN (resized antes de entrar al modelo)
-  image_size: [448, 448]
+  image_size: [224, 224]
   batch_size: 16
   num_workers: 0
   # Auto-crop: detectar región circular del fundus y recortar antes del resize.
