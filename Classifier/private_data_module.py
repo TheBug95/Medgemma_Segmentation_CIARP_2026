@@ -162,14 +162,21 @@ class PrivateDataset(Dataset):
     def _load_mask(self, stem: str) -> torch.Tensor:
         """
         Disco optico GT = union de <stem>_disc.npy y <stem>_cup.npy, binarizado y
-        redimensionado (NEAREST) a image_size. Si no hay mascaras -> todo ceros.
+        redimensionado (NEAREST) a image_size. Si no hay mascaras (faltan o el .npy
+        esta vacio/corrupto/ilegible) -> todo ceros.
         """
         merged: np.ndarray | None = None
         for suffix in ("_disc.npy", "_cup.npy"):
             path = self.masks_dir / f"{stem}{suffix}"
-            if path.is_file():
+            if not path.is_file():
+                continue
+            try:
                 binary = np.load(path) > 0
-                merged = binary if merged is None else (merged | binary)
+            except (EOFError, OSError, ValueError) as exc:
+                # .npy presente pero ilegible (0 bytes / truncado / no es npy): se ignora.
+                logger.warning("Mascara ilegible %s (%s); se ignora.", path.name, exc)
+                continue
+            merged = binary if merged is None else (merged | binary)
 
         if merged is None:
             logger.warning("Sin mascara (_disc/_cup) para %s; se usa mascara vacia.", stem)
