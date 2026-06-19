@@ -60,8 +60,6 @@ def run_inference(
     clf.model.eval()
 
     ds = data_module.build_dataset(data_module.splits[split], augment=False)
-    print("DS")
-    print(ds)
 
     ids: list[str] = []
     y_true: list[int] = []
@@ -71,10 +69,6 @@ def run_inference(
         if int(item["label"]) < 0:
             raise ValueError(f"La imagen {item['image_id']} no tiene label en el split '{split}'.")
         out = clf.predict(item["image"])  # softmax sobre distancias negativas
-
-        print("OUT")
-        print(out)
-
         ids.append(item["image_id"])
         y_true.append(int(item["label"]))  # 0 = normal, 1 = glaucoma
         y_proba.append(float(out["distribution"]["glaucoma"]))
